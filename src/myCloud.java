@@ -6,11 +6,15 @@
    João Nobre 51659
 */
 import java.util.ArrayList;
+import java.io.IOException;
+import java.net.Socket;
+import java.net.UnknownHostException;
 
 public class myCloud {
 
-    public static void main(String[] args) {
-        String serverAddress = "";
+    public static void main(String[] args) throws UnknownHostException, IOException {
+        String address = "localhost";
+        int port = 9999;
         ArrayList<String> filenames = new ArrayList<String>();
         String mode = "";
 
@@ -27,7 +31,9 @@ public class myCloud {
         for (int i = 0; i < args.length; i++) {
             if (args[i].equals("-a")) {
                 // Get server address
-                serverAddress = args[i+1];
+                String[] parts = args[i+1].split(":");
+                address = parts[0];
+                port = Integer.parseInt(parts[1]);
                 i++;
             } else if (args[i].equals("-c") || args[i].equals("-s") || args[i].equals("-e") || args[i].equals("-g")) {
                 // Get command (c, s, e, or g)
@@ -41,7 +47,9 @@ public class myCloud {
                 i--;
             }
         }
-        //TODO coneção
+
+        //connect to socket
+		Socket socket = new Socket(address, port);
 
         // Perform action based on command
         switch (mode) {
@@ -61,6 +69,8 @@ public class myCloud {
                 System.out.println("Invalid command specified.");
                 break;
         }
+        
+        socket.close();
     }
 
 }
