@@ -8,13 +8,18 @@
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.CipherOutputStream;
 
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.FileInputStream;  	
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.File;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -25,7 +30,7 @@ import java.security.cert.CertificateException;
 
 public class myCloud {
 
-    public static void main(String[] args) throws UnknownHostException, IOException {
+    public static void main(String[] args) throws Exception {
         String address = "localhost";
         int port = 9999;
         ArrayList<String> filenames = new ArrayList<String>();
@@ -90,13 +95,48 @@ public class myCloud {
     private static Boolean fileExistsOnServer(Socket socket, String filePath) {
 		return null;
     }
-    private static String encryptFileSecret(String file, SecretKey key) {
-    	return null;
+    private static File encryptFileSecret(String filePath, SecretKey key) throws Exception {
+
+	    Cipher c = Cipher.getInstance("AES");
+	    c.init(Cipher.ENCRYPT_MODE, key);
+
+    	FileInputStream fis = new FileInputStream(filePath);
+	    FileOutputStream fos = new FileOutputStream(filePath+".cifrado");
+
+	    CipherOutputStream cos = new CipherOutputStream(fos, c);
+	    byte[] b = new byte[16];  
+	    int i = fis.read(b);
+	    while (i != -1) {
+	        cos.write(b, 0, i);
+	        i = fis.read(b);
+	    }
+	    cos.close();
+	    fis.close();
+        File file = new File(filePath);
+    	return file;
     }
-    private static String encryptFilePrivate(String file, PublicKey key) {
-    	return null;
+
+    private static File encryptKeyFile(SecretKey secretKey, PublicKey publicKey, String filePath) throws Exception {
+        Cipher cRSA = Cipher.getInstance("RSA");
+        cRSA.init(Cipher.WRAP_MODE, publicKey);
+        byte[] encryptedSecretKey = cRSA.wrap(secretKey);
+        
+        //saves encrypted key on a file
+        FileOutputStream keyOutFile = new FileOutputStream(filePath + ".chave_secreta");
+        keyOutFile.write(encryptedSecretKey);
+        keyOutFile.close();
+        File file = new File(filePath);
+    	return file;
     }
-    private static void sendFile(Socket socket, String filePath) {
+
+    private static void sendFile(Socket socket, File file) throws Exception{
+		ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+        byte[] buffer = new byte[(int) file.length()];
+        FileInputStream fis = new FileInputStream(file);
+        fis.read(buffer);
+        fis.close();
+        out.writeObject(buffer);
+        System.out.println("Sent file: " + file);
     }
 
     private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
@@ -119,9 +159,9 @@ public class myCloud {
 	        PublicKey publicKey = cert.getPublicKey();
 
             //cifra ficheiro com chave simetrica
-            String encryptedFile = encryptFileSecret(filePath, secretKey);
+            File encryptedFile = encryptFileSecret(filePath, secretKey);
             //cifra chave simetrica com a chaver privada
-            String encryptedKey = encryptFilePrivate(filePath, publicKey);
+            File encryptedKey = encryptKeyFile(secretKey, publicKey, filePath);
 
             //envia ficheiro cifrado ao servidor
             sendFile(socket, encryptedFile);
@@ -129,6 +169,5 @@ public class myCloud {
             sendFile(socket, encryptedKey);
 
     	}
-    	
     }
 }
