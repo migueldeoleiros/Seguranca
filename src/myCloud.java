@@ -14,10 +14,14 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.CipherOutputStream;
 
+import java.io.DataOutputStream;
+import java.io.OutputStream;
 import java.io.FileInputStream;  	
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.net.Socket;
 import java.security.KeyStore;
@@ -93,15 +97,14 @@ public class myCloud {
     }
     
     private static Boolean fileExistsOnServer(Socket socket, String filePath) {
-		return null;
+		return false;
     }
     private static File encryptFileSecret(String filePath, SecretKey key) throws Exception {
-
 	    Cipher c = Cipher.getInstance("AES");
 	    c.init(Cipher.ENCRYPT_MODE, key);
 
     	FileInputStream fis = new FileInputStream(filePath);
-	    FileOutputStream fos = new FileOutputStream(filePath+".cifrado");
+	    FileOutputStream fos = new FileOutputStream(filePath + ".cifrado");
 
 	    CipherOutputStream cos = new CipherOutputStream(fos, c);
 	    byte[] b = new byte[16];  
@@ -112,7 +115,7 @@ public class myCloud {
 	    }
 	    cos.close();
 	    fis.close();
-        File file = new File(filePath);
+        File file = new File(filePath + ".cifrado");
     	return file;
     }
 
@@ -125,18 +128,27 @@ public class myCloud {
         FileOutputStream keyOutFile = new FileOutputStream(filePath + ".chave_secreta");
         keyOutFile.write(encryptedSecretKey);
         keyOutFile.close();
-        File file = new File(filePath);
+        File file = new File(filePath + ".chave_secreta");
     	return file;
     }
 
     private static void sendFile(Socket socket, File file) throws Exception{
-		ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-        byte[] buffer = new byte[(int) file.length()];
-        FileInputStream fis = new FileInputStream(file);
-        fis.read(buffer);
-        fis.close();
-        out.writeObject(buffer);
+        int bytes = 0;
+        
+        OutputStream outputStream = socket.getOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        FileInputStream fileInputStream = new FileInputStream(file);
+
+        dataOutputStream.writeUTF(file.getName());
+        dataOutputStream.writeLong(file.length());
+        byte[] buffer = new byte[1024];
+        while ((bytes = fileInputStream.read(buffer)) != -1) {
+            dataOutputStream.write(buffer, 0, bytes);
+            dataOutputStream.flush();
+        }
+
         System.out.println("Sent file: " + file);
+        fileInputStream.close();
     }
 
     private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
@@ -154,7 +166,7 @@ public class myCloud {
 	        //get privateKey from keystore
 	        FileInputStream kfile = new FileInputStream("keystore.maria");  //keystore
 	        KeyStore kstore = KeyStore.getInstance("PKCS12");
-	        kstore.load(kfile, "123456".toCharArray());           //password
+	        kstore.load(kfile, "123123".toCharArray());           //password
 	        Certificate cert = kstore.getCertificate("maria");    //alias do utilizador
 	        PublicKey publicKey = cert.getPublicKey();
 
@@ -163,7 +175,7 @@ public class myCloud {
             //cifra chave simetrica com a chaver privada
             File encryptedKey = encryptKeyFile(secretKey, publicKey, filePath);
 
-            //envia ficheiro cifrado ao servidor
+            //envia ficheiro cifrado ao servidorz
             sendFile(socket, encryptedFile);
             //envia  chave simetrica cifrada ao servidor
             sendFile(socket, encryptedKey);
