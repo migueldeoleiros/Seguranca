@@ -6,11 +6,15 @@
    João Nobre 51659
 */
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.io.InputStream;
+import java.io.DataInputStream;
 
 
 public class myCloudServer {
@@ -62,26 +66,43 @@ public class myCloudServer {
  
 		public void run(){
 			try {
-				ObjectOutputStream outStream = new ObjectOutputStream(socket.getOutputStream());
-				ObjectInputStream inStream = new ObjectInputStream(socket.getInputStream());
-
-				String msg = null;
-			
 				try {
-					msg = (String)inStream.readObject();
-					System.out.println(msg);
-				}catch (ClassNotFoundException e1) {
-					e1.printStackTrace();
+					InputStream inputStream = socket.getInputStream();
+					DataInputStream dataInputStream = new DataInputStream(inputStream);
+					int n_files = dataInputStream.readInt();
+					for (int i = 0; i < n_files*2; i++){
+						receiveFile(socket, inputStream, dataInputStream);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
 				}
-				
-				outStream.close();
-				inStream.close();
  			
 				socket.close();
 
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
+		}
+
+		private static void receiveFile(Socket socket, InputStream inputStream, DataInputStream dataInputStream) throws Exception{
+			int bytes = 0;
+
+			String fileName = dataInputStream.readUTF();
+
+			File directory = new File("serverFiles");
+			File file = new File(directory, fileName);
+
+			FileOutputStream fileOutputStream = new FileOutputStream(file);
+
+			long size = dataInputStream.readLong();
+			byte[] buffer = new byte[1024];
+			while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+				fileOutputStream.write(buffer, 0, bytes);
+				size -= bytes;
+			}
+
+			System.out.println("Received file: " + file);
+			
 		}
 	}
 }
