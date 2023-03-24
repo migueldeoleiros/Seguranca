@@ -67,7 +67,12 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					receiveFile(socket);
+					InputStream inputStream = socket.getInputStream();
+					DataInputStream dataInputStream = new DataInputStream(inputStream);
+					int n_files = dataInputStream.readInt();
+					for (int i = 0; i < n_files*2; i++){
+						receiveFile(socket, inputStream, dataInputStream);
+					}
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -79,10 +84,8 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket) throws Exception{
+		private static void receiveFile(Socket socket, InputStream inputStream, DataInputStream dataInputStream) throws Exception{
 			int bytes = 0;
-			InputStream inputStream = socket.getInputStream();
-			DataInputStream dataInputStream = new DataInputStream(inputStream);
 
 			String fileName = dataInputStream.readUTF();
 
@@ -99,7 +102,7 @@ public class myCloudServer {
 			}
 
 			System.out.println("Received file: " + file);
-			fileOutputStream.close();
+			
 		}
 	}
 }

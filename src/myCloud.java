@@ -34,11 +34,13 @@ import java.security.cert.CertificateException;
 
 public class myCloud {
 
+    private static ArrayList<String> filenames;
+
     public static void main(String[] args) throws Exception {
         String address = "localhost";
         int port = 9999;
-        ArrayList<String> filenames = new ArrayList<String>();
         String mode = "";
+        filenames = new ArrayList<String>();
 
         // Check if arguments were provided
         if (args.length == 0) {
@@ -76,7 +78,6 @@ public class myCloud {
         // Perform action based on command
         switch (mode) {
             case "c":
-                // TODO cifra
             	sendEncryptedFile(socket, filenames);
                 break;
             case "s":
@@ -132,11 +133,9 @@ public class myCloud {
     	return file;
     }
 
-    private static void sendFile(Socket socket, File file) throws Exception{
+    private static void sendFile(Socket socket, File file, OutputStream outputStream, DataOutputStream dataOutputStream) throws Exception{
         int bytes = 0;
         
-        OutputStream outputStream = socket.getOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         FileInputStream fileInputStream = new FileInputStream(file);
 
         dataOutputStream.writeUTF(file.getName());
@@ -148,10 +147,15 @@ public class myCloud {
         }
 
         System.out.println("Sent file: " + file);
-        fileInputStream.close();
+        
     }
 
     private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
+        OutputStream outputStream = socket.getOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+
+        dataOutputStream.writeInt(filenames.size());
+        
     	for (String filePath : filePaths) {
     		// Check if the encrypted file already exists on the server
             if (fileExistsOnServer(socket, filePath)) {
@@ -176,9 +180,9 @@ public class myCloud {
             File encryptedKey = encryptKeyFile(secretKey, publicKey, filePath);
 
             //envia ficheiro cifrado ao servidorz
-            sendFile(socket, encryptedFile);
+            sendFile(socket, encryptedFile, outputStream, dataOutputStream);
             //envia  chave simetrica cifrada ao servidor
-            sendFile(socket, encryptedKey);
+            sendFile(socket, encryptedKey, outputStream, dataOutputStream);
 
     	}
     }
