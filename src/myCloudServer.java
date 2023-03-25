@@ -11,6 +11,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.InputStream;
@@ -72,12 +73,22 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					InputStream inputStream = socket.getInputStream();
-					DataInputStream dataInputStream = new DataInputStream(inputStream);
-					int n_files = dataInputStream.readInt();
-					for (int i = 0; i < n_files*2; i++){
-						receiveFile(socket, inputStream, dataInputStream);
+					ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
+					DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+
+					int command = dataInputStream.readInt();
+					switch (command) {
+						case 0: //receive files 
+							int n_files = dataInputStream.readInt();
+							for (int i = 0; i < n_files*2; i++){
+								receiveFile(socket, dataInputStream, outputStream);
+							}
+							break;
+						case 1: //send files 
+							// TODO
+							break;
 					}
+
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -89,25 +100,32 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket, InputStream inputStream, DataInputStream dataInputStream) throws Exception{
+		private static void receiveFile(Socket socket, DataInputStream dataInputStream, ObjectOutputStream outputStream) throws Exception{
 			int bytes = 0;
 
 			String fileName = dataInputStream.readUTF();
+			System.out.println("Receibed file:" + fileName);
 
 			File directory = new File("serverFiles");
 			File file = new File(directory, fileName);
+			if (file.exists()) {
+				System.err.println("File already exists");
+				outputStream.writeObject(false);
+			}else {
+				outputStream.writeObject(true);
+				FileOutputStream fileOutputStream = new FileOutputStream(file);
 
-			FileOutputStream fileOutputStream = new FileOutputStream(file);
+				long size = dataInputStream.readLong();
 
-			long size = dataInputStream.readLong();
-			byte[] buffer = new byte[1024];
-			while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-				fileOutputStream.write(buffer, 0, bytes);
-				size -= bytes;
+				byte[] buffer = new byte[1024];
+				while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+					fileOutputStream.write(buffer, 0, bytes);
+					size -= bytes;
+				}
+
+				System.out.println("Received file: " + file);
+				fileOutputStream.close();
 			}
-
-			System.out.println("Received file: " + file);
-			fileOutputStream.close();
 		}
 	}
 }
