@@ -47,10 +47,15 @@ public class myCloudServer {
 		    }
 		    catch (IOException e) {
 		        e.printStackTrace();
+				break;
 		    }
 		    
 		}
-		//sSoc.close();
+		try {
+			sSoc.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 
@@ -102,7 +107,7 @@ public class myCloudServer {
 			}
 
 			System.out.println("Received file: " + file);
-			
+			fileOutputStream.close();
 		}
 	}
 }
