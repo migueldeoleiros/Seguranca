@@ -147,7 +147,7 @@ public class myCloud {
         }
 
         System.out.println("Sent file: " + file);
-        
+        fileInputStream.close();
     }
 
     private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
