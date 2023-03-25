@@ -1,6 +1,7 @@
 bin
-src/*.txt
-src/*.pdf
-src/*chave_secreta
-src/*.cifrado
-src/serverFiles
+*.txt
+*.pdf
+*chave_secreta
+*.cifrado
+*serverFiles
+*keystore.*
