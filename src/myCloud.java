@@ -36,11 +36,11 @@ import java.security.cert.CertificateException;
 public class myCloud {
 
     private static ArrayList<String> filenames;
+    private static String mode = "";
 
     public static void main(String[] args) throws Exception {
         String address = "localhost";
         int port = 9999;
-        String mode = "";
         filenames = new ArrayList<String>();
 
         // Check if arguments were provided
@@ -89,7 +89,7 @@ public class myCloud {
                 assina(socket, filenames);
                 break;
             case "e":
-                // TODO cifra e assina
+                assina_cifra(socket, filenames);
                 break;
             case "g":
                 // TODO recebe
@@ -108,7 +108,14 @@ public class myCloud {
 	    c.init(Cipher.ENCRYPT_MODE, key);
 
     	FileInputStream fis = new FileInputStream(filePath);
-	    FileOutputStream fos = new FileOutputStream(filePath + ".cifrado");
+	    FileOutputStream fos = null;
+        File file = null;
+
+        if (mode.charAt(0) == 'c'){
+            fos = new FileOutputStream(filePath + ".cifrado");
+        } else if (mode.charAt(0) == 'e'){
+            fos = new FileOutputStream(filePath);
+        }
 
 	    CipherOutputStream cos = new CipherOutputStream(fos, c);
 	    byte[] b = new byte[16];  
@@ -119,8 +126,14 @@ public class myCloud {
 	    }
 	    cos.close();
 	    fis.close();
-        File file = new File(filePath + ".cifrado");
-    	return file;
+        
+        if (mode.charAt(0) == 'c'){
+            file = new File(filePath + ".cifrado");
+        } else if (mode.charAt(0) == 'e'){
+            file = new File(filePath);
+        }
+        
+        return file;
     }
 
     private static void decryptFileSecret(String filePath, SecretKey key) throws Exception {
@@ -228,7 +241,7 @@ public class myCloud {
         DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
 
         dataOutputStream.writeInt(0); //send command
-        dataOutputStream.writeInt(filenames.size());
+        dataOutputStream.writeInt(filenames.size()*2);
         
     	for (String filePath : filePaths) {
             //gerar secretKey
@@ -256,6 +269,7 @@ public class myCloud {
             if (!sendFile(socket, encryptedKey, dataOutputStream, dataInputStream)) {
                 System.err.println("File already exists on server: " + encryptedKey);
             }
+            
     	}
     }
     private static void receibeFile(Socket socket, List<String> filePaths) throws Exception {
@@ -290,6 +304,76 @@ public class myCloud {
     		}
     	}
     }
+
+    private static void assina_cifra(Socket socket, List<String> filePaths) throws Exception {
+
+        KeyGenerator kg = KeyGenerator.getInstance("AES");
+	    kg.init(128);
+        SecretKey secretKey = kg.generateKey();
+
+        //get privateKey from keystore
+        FileInputStream kfile = new FileInputStream("keystore.maria");  //keystore
+        KeyStore kstore = KeyStore.getInstance("PKCS12");
+        kstore.load(kfile, "123123".toCharArray());           //password
+        Certificate cert = kstore.getCertificate("maria");    //alias do utilizador
+        PublicKey publicKey = cert.getPublicKey();
+	    Key minhaChavePrivada = kstore.getKey("maria", "123123".toCharArray());
+
+        OutputStream outputStream = socket.getOutputStream();
+	    DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+	    DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+
+		dataOutputStream.writeInt(0); // send command
+		dataOutputStream.writeInt(filenames.size()*3);
+
+        for (String filePath : filePaths) {
+            File file = new File(filePath);
+            File signatureFile = new File(filePath + ".assinatura");
+            File securedFile = new File(filePath + ".seguro");
+            
+
+            Signature signature = Signature.getInstance("SHA256withRSA");
+	        signature.initSign((PrivateKey) minhaChavePrivada);
+
+	        FileInputStream fis = new FileInputStream(file);
+	        byte[] buffer = new byte[1024];
+	        int n;
+	        while ((n = fis.read(buffer)) != -1) {
+	            signature.update(buffer, 0, n);
+	        }
+	        fis.close();
+
+            // Escreve o arquivo assinado
+	        FileOutputStream fos = new FileOutputStream(securedFile);
+	        fos.write(signature.sign());
+	        fos.close();
+
+	        // Cria o arquivo de assinatura localmente
+	        signatureFile.createNewFile();
+
+	        // Escreve o arquivo de assinatura
+	        fos = new FileOutputStream(signatureFile);
+	        fos.write(signature.sign());
+	        fos.close();
+
+            //cifra ficheiro com chave simetrica
+            securedFile = encryptFileSecret(securedFile.getName(), secretKey);
+            //cifra chave simetrica com a chaver privada
+            File encryptedKey = encryptKeyFile(secretKey, publicKey, securedFile.getName());
+
+            if (!sendFile(socket, signatureFile, dataOutputStream, dataInputStream)) {
+                System.err.println("File already exists on server: " + signatureFile);
+            }
+            //envia  chave simetrica cifrada ao servidor
+            if (!sendFile(socket, encryptedKey, dataOutputStream, dataInputStream)) {
+                System.err.println("File already exists on server: " + encryptedKey);
+            }
+            if (!sendFile(socket, securedFile, dataOutputStream, dataInputStream)) {
+                System.err.println("File already exists on server: " + securedFile);
+            }
+        }
+    }
+
     private static void assina(Socket socket, List<String> filePaths) throws Exception {
 
 	    OutputStream outputStream = socket.getOutputStream();
@@ -303,7 +387,7 @@ public class myCloud {
 	    Key minhaChavePrivada = kstore.getKey("maria", "123123".toCharArray());
 
 		dataOutputStream.writeInt(0); // send command
-		dataOutputStream.writeInt(filenames.size());
+		dataOutputStream.writeInt(filenames.size()*2);
 	    
 	    // Itera por cada ficheiro
 	    for (String filePath : filePaths) {
@@ -358,8 +442,11 @@ public class myCloud {
 	        fos.close();
 
 	        // Envia o arquivo assinado para o servidor
-	        sendFile(socket, signedFile,dataOutputStream,inputStream);
-	        sendFile(socket, signatureFileToSend,dataOutputStream,inputStream);
+
+            sendFile(socket, signedFile,dataOutputStream,inputStream);
+            sendFile(socket, signatureFileToSend,dataOutputStream,inputStream);
+
+            
 	        // Envia o arquivo de assinatura para o servidor
 //	        if (!sendFile(socket, signatureFileToSend, dataOutputStream,inputStream)) {
 //	            System.err.println("File already exists on server: " + signatureFileToSend);

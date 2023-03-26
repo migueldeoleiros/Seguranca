@@ -81,7 +81,7 @@ public class myCloudServer {
 					switch (command) {
 						case 0: //receive files 
 							n_files = dataInputStream.readInt();
-							for (int i = 0; i < n_files*2; i++){
+							for (int i = 0; i < n_files; i++){
 								receiveFile(socket, dataInputStream, outputStream);
 							}
 							break;
@@ -108,9 +108,12 @@ public class myCloudServer {
 			int bytes = 0;
 
 			String fileName = dataInputStream.readUTF();
-			System.out.println("Receiving file:" + fileName);
+			System.out.println("Receiving file: " + fileName);
 
 			File directory = new File("serverFiles");
+			if (!directory.exists()){
+				directory.mkdir();
+			}
 			File file = new File(directory, fileName);
 			if (file.exists()) {
 				System.err.println("File already exists");
