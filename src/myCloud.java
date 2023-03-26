@@ -32,6 +32,7 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
 public class myCloud {
 
@@ -136,7 +137,7 @@ public class myCloud {
         return file;
     }
 
-    private static void decryptFileSecret(String filePath, SecretKey key) throws Exception {
+    private static String decryptFileSecret(String filePath, SecretKey key) throws Exception {
         Cipher c = Cipher.getInstance("AES");
         c.init(Cipher.DECRYPT_MODE, key);
 
@@ -156,6 +157,8 @@ public class myCloud {
         fos.close();
         cis.close();
         fis.close();
+
+        return decryptedFilePath;
     }
 
     private static File encryptKeyFile(SecretKey secretKey, PublicKey publicKey, String filePath) throws Exception {
@@ -272,10 +275,38 @@ public class myCloud {
             
     	}
     }
+
+    private static boolean verifySignature(String filePath, String signaturePath, X509Certificate cert) throws Exception{
+        FileInputStream file = new FileInputStream(filePath);
+        
+        byte [] buffer = new byte [16];
+        Signature s = Signature.getInstance("SHA256withRSA");
+        s.initVerify(cert);
+        
+        int n;
+        while((n = file.read(buffer))!= -1) {
+        	s.update(buffer,0,n);
+        }
+        
+        byte [] signature = new byte [256];
+        FileInputStream fileSignature = new FileInputStream(signaturePath);
+        fileSignature.read(signature);
+        boolean boolSignature = s.verify(signature);
+        
+        fileSignature.close();
+        file.close();
+
+        return (boolSignature);
+    }
+
     private static void receibeFile(Socket socket, List<String> filePaths) throws Exception {
         OutputStream outputStream = socket.getOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+
+    	FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
+    	KeyStore kstore = KeyStore.getInstance("PKCS12");
+    	kstore.load(kfile2, "123123".toCharArray()); // password
 
         dataOutputStream.writeInt(1); //send command
         dataOutputStream.writeInt(filenames.size());
@@ -291,9 +322,6 @@ public class myCloud {
     			}
 
     			//obter chave privada
-    			FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
-    			KeyStore kstore = KeyStore.getInstance("PKCS12");
-    			kstore.load(kfile2, "123123".toCharArray()); // password
     			Key privateKey = kstore.getKey("maria", "123123".toCharArray());
 
     			//obter chave simetrica
@@ -301,6 +329,58 @@ public class myCloud {
 
     			//decifrar ficheiro
     			decryptFileSecret(filePath, secretKey);
+
+    		} else if (filePath.endsWith(".assinado")) {
+    			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + filePath);
+    			}
+    			String signaturePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".assinatura";
+    			if (!getFile(socket, signaturePath, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + signaturePath);
+    			}
+    			// obter certificado do assinante
+    		    X509Certificate cert = (X509Certificate) kstore.getCertificate("maria");
+    	        
+    	        boolean signatureStatus = verifySignature(filePath, signaturePath, cert);
+    	        if(signatureStatus) {
+    				System.out.println(filePath + " verificado");
+    	        } else {
+    				System.err.println(filePath + " não passa a verificação da assinatura");
+    	        }
+    	        
+    		} else if (filePath.endsWith(".seguro")) {
+    			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + filePath);
+    			}
+    			String fileKey = filePath.substring(0, filePath.lastIndexOf(".")) + ".chave_secreta";
+    			if (!getFile(socket, fileKey, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + fileKey);
+    			}
+    			String signaturePath = filePath.substring(0, filePath.lastIndexOf(".")) + ".assinatura";
+    			if (!getFile(socket, signaturePath, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + signaturePath);
+    			}
+
+    			//obter chave privada
+    			Key privateKey = kstore.getKey("maria", "123123".toCharArray());
+
+    			//obter chave simetrica
+    			SecretKey secretKey = decryptKeyFile(fileKey, privateKey);
+
+    			//decifrar ficheiro
+    			String decryptedFilePath = decryptFileSecret(filePath, secretKey);
+
+    			// obter certificado do assinante
+    		    X509Certificate cert = (X509Certificate) kstore.getCertificate("maria");
+    	        
+    	        boolean signatureStatus = verifySignature(decryptedFilePath, signaturePath, cert);
+    	        if(signatureStatus) {
+    				System.out.println(filePath + " verificado");
+    	        } else {
+    				System.err.println(filePath + " não passa a verificação da assinatura");
+    	        }
+    		} else {
+    			System.err.println("File doesn't exists on server: " + filePath);
     		}
     	}
     }
