@@ -8,3 +8,4 @@ bin
 *.seguro
 *serverFiles
 *keystore.*
+!README.txt
