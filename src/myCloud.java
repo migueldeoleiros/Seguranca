@@ -414,12 +414,14 @@ public class myCloud {
             File file = new File(filePath);
             File signatureFile = new File(filePath + ".assinatura");
             File securedFile = new File(filePath + ".seguro");
-            
+            securedFile.createNewFile();
+
+            Files.copy(file.toPath(), securedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
             Signature signature = Signature.getInstance("SHA256withRSA");
 	        signature.initSign((PrivateKey) minhaChavePrivada);
 
-	        FileInputStream fis = new FileInputStream(file);
+	        FileInputStream fis = new FileInputStream(securedFile);
 	        byte[] buffer = new byte[1024];
 	        int n;
 	        while ((n = fis.read(buffer)) != -1) {
@@ -427,16 +429,8 @@ public class myCloud {
 	        }
 	        fis.close();
 
-            // Escreve o arquivo assinado
-	        FileOutputStream fos = new FileOutputStream(securedFile);
-	        fos.write(signature.sign());
-	        fos.close();
-
-	        // Cria o arquivo de assinatura localmente
-	        signatureFile.createNewFile();
-
 	        // Escreve o arquivo de assinatura
-	        fos = new FileOutputStream(signatureFile);
+	        FileOutputStream fos = new FileOutputStream(signatureFile);
 	        fos.write(signature.sign());
 	        fos.close();
 
@@ -459,7 +453,6 @@ public class myCloud {
     }
 
     private static void assina(Socket socket, List<String> filePaths) throws Exception {
-
         OutputStream outputStream = socket.getOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         DataInputStream inputStream = new DataInputStream(socket.getInputStream());
