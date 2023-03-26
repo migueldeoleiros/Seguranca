@@ -23,6 +23,8 @@ import java.io.InputStream;
 import java.io.File;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -456,81 +458,72 @@ public class myCloud {
 
     private static void assina(Socket socket, List<String> filePaths) throws Exception {
 
-	    OutputStream outputStream = socket.getOutputStream();
-	    DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-	    DataInputStream inputStream = new DataInputStream(socket.getInputStream());
+        OutputStream outputStream = socket.getOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        DataInputStream inputStream = new DataInputStream(socket.getInputStream());
 
-	    // Chave privada do assinante -> keystore
-	    FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
-	    KeyStore kstore = KeyStore.getInstance("PKCS12");
-	    kstore.load(kfile2, "123123".toCharArray()); // senha
-	    Key minhaChavePrivada = kstore.getKey("maria", "123123".toCharArray());
+        // Chave privada do assinante -> keystore
+        FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
+        KeyStore kstore = KeyStore.getInstance("PKCS12");
+        kstore.load(kfile2, "123123".toCharArray()); // senha
+        Key minhaChavePrivada = kstore.getKey("maria", "123123".toCharArray());
 
-		dataOutputStream.writeInt(0); // send command
-		dataOutputStream.writeInt(filenames.size()*2);
-	    
-	    // Itera por cada ficheiro
-	    for (String filePath : filePaths) {
+        dataOutputStream.writeInt(0); // send command
+        dataOutputStream.writeInt(filePaths.size()*2);
 
-	        // Verifica se o arquivo existe localmente
-	        File arquivo = new File(filePath);
-	        if (!arquivo.exists()) {
-	            System.err.println("O ficheiro nao existe: " + filePath);
-	            continue;
-	        }
+        // Itera por cada ficheiro
+        for (String filePath : filePaths) {
 
-	        // FALTA VerificaR se o arquivo assinado já existe no servidor!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	        String signedFilePath = filePath + ".assinado";
+            // Verifica se o arquivo existe localmente
+            File arquivo = new File(filePath);
+            if (!arquivo.exists()) {
+                System.err.println("O ficheiro nao existe: " + filePath);
+                continue;
+            }
 
+            // Verifica se o arquivo de assinatura já existe localmente
+            String signatureFilePath = filePath + ".assinatura";
+            File signatureFile = new File(signatureFilePath);
+            if (signatureFile.exists()) {
+                System.err.println("Signature file already exists: " + signatureFilePath);
+                continue;
+            }
 
-	        // Verifica se o arquivo de assinatura já existe localmente
-	        String signatureFilePath = filePath + ".assinatura";
-	        File signatureFile = new File(signatureFilePath);
-	      if (signatureFile.exists()) {
-	          System.err.println("Signature file already exists: " + signatureFilePath);
-	          continue;
-	      }
+            // Cria o arquivo assinado localmente
+            String signedFilePath = filePath + ".assinado";
+            File signedFile = new File(signedFilePath);
+            signedFile.createNewFile();
 
-	        // Cria o arquivo assinado localmente
-	        File signedFile = new File(signedFilePath);
-	        signedFile.createNewFile();
+            // Faz a cópia do arquivo original para o arquivo assinado
+            Files.copy(arquivo.toPath(), signedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-	        // Assina o arquivo
-	        Signature signature = Signature.getInstance("SHA256withRSA");
-	        signature.initSign((PrivateKey) minhaChavePrivada);
+            // Assina o arquivo
+            Signature signature = Signature.getInstance("SHA256withRSA");
+            signature.initSign((PrivateKey) minhaChavePrivada);
 
-	        FileInputStream fis = new FileInputStream(arquivo);
-	        byte[] buffer = new byte[1024];
-	        int n;
-	        while ((n = fis.read(buffer)) != -1) {
-	            signature.update(buffer, 0, n);
-	        }
-	        fis.close();
+            FileInputStream fis = new FileInputStream(signedFile);
+            byte[] buffer = new byte[1024];
+            int n;
+            while ((n = fis.read(buffer)) != -1) {
+                signature.update(buffer, 0, n);
+            }
+            fis.close();
 
-	        // Escreve o arquivo assinado
-	        FileOutputStream fos = new FileOutputStream(signedFilePath);
-	        fos.write(signature.sign());
-	        fos.close();
+            // Escreve o arquivo de assinatura
+            FileOutputStream fos = new FileOutputStream(signatureFilePath);
+            fos.write(signature.sign());
+            fos.close();
 
-	        // Cria o arquivo de assinatura localmente
-	        File signatureFileToSend = new File(signatureFilePath);
-	        signatureFileToSend.createNewFile();
+            File signatureFileToSend = new File(signatureFilePath);
 
-	        // Escreve o arquivo de assinatura
-	        fos = new FileOutputStream(signatureFilePath);
-	        fos.write(signature.sign());
-	        fos.close();
-
-	        // Envia o arquivo assinado para o servidor
-
-            sendFile(socket, signedFile,dataOutputStream,inputStream);
-            sendFile(socket, signatureFileToSend,dataOutputStream,inputStream);
-
-            
-	        // Envia o arquivo de assinatura para o servidor
-//	        if (!sendFile(socket, signatureFileToSend, dataOutputStream,inputStream)) {
-//	            System.err.println("File already exists on server: " + signatureFileToSend);
-//	            continue;
-	        }
-	    }
+            // Envia o arquivo assinado para o servidor
+            if (!sendFile(socket, signedFile, dataOutputStream, inputStream)) {
+                System.err.println("File already exists on server: " + signedFile);
+            }
+            // Envia o arquivo de assinatura para o servidor
+            if (!sendFile(socket, signatureFileToSend, dataOutputStream, inputStream)) {
+                System.err.println("File already exists on server: " + signatureFileToSend);
+            }
+        }
+    }
 }
