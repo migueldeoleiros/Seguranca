@@ -1,7 +1,10 @@
 bin
 *.txt
 *.pdf
-*chave_secreta
+*.chave_secreta
 *.cifrado
+*.assinado
+*.assinatura
+*.seguro
 *serverFiles
 *keystore.*
