@@ -10,21 +10,20 @@ import java.util.List;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
-import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.CipherOutputStream;
+import javax.crypto.CipherInputStream;
 
 import java.io.DataOutputStream;
+import java.io.DataInputStream;
 import java.io.OutputStream;
 import java.io.FileInputStream;  	
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.DataInputStream;
 import java.io.File;
 import java.net.Socket;
 import java.net.SocketException;
+import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -89,6 +88,7 @@ public class myCloud {
                 break;
             case "g":
                 // TODO recebe
+            	receibeFile(socket, filenames);
                 break;
             default:
                 System.out.println("Invalid command specified.");
@@ -118,6 +118,28 @@ public class myCloud {
     	return file;
     }
 
+    private static void decryptFileSecret(String filePath, SecretKey key) throws Exception {
+        Cipher c = Cipher.getInstance("AES");
+        c.init(Cipher.DECRYPT_MODE, key);
+
+        FileInputStream fis = new FileInputStream(filePath);
+        CipherInputStream cis = new CipherInputStream(fis, c);
+
+        String decryptedFilePath = filePath.substring(0, filePath.lastIndexOf("."));
+        FileOutputStream fos = new FileOutputStream(decryptedFilePath);
+
+        byte[] b = new byte[256];
+        int i = cis.read(b);
+        while (i != -1) {
+            fos.write(b, 0, i);
+            i = cis.read(b);
+        }
+
+        fos.close();
+        cis.close();
+        fis.close();
+    }
+
     private static File encryptKeyFile(SecretKey secretKey, PublicKey publicKey, String filePath) throws Exception {
         Cipher cRSA = Cipher.getInstance("RSA");
         cRSA.init(Cipher.WRAP_MODE, publicKey);
@@ -131,7 +153,20 @@ public class myCloud {
     	return file;
     }
 
-    private static boolean sendFile(Socket socket, File file, DataOutputStream dataOutputStream, ObjectInputStream inputStream) throws Exception{
+    private static SecretKey decryptKeyFile(String keyPath, Key privateKey) throws Exception {
+        FileInputStream encryptedKey = new FileInputStream(keyPath);
+        byte[] encryptedKeyBytes = new byte[encryptedKey.available()];
+        encryptedKey.read(encryptedKeyBytes);
+
+        Cipher c2 = Cipher.getInstance("RSA");
+        c2.init(Cipher.UNWRAP_MODE, privateKey);
+        SecretKey secretKey = (SecretKey) c2.unwrap(encryptedKeyBytes, "AES", Cipher.SECRET_KEY);
+ 
+        encryptedKey.close();
+    	return secretKey;
+    }
+
+    private static boolean sendFile(Socket socket, File file, DataOutputStream dataOutputStream, DataInputStream dataInputStream) throws Exception{
         int bytes = 0;
         boolean doesntExist = true;
         
@@ -139,7 +174,7 @@ public class myCloud {
 
         dataOutputStream.writeUTF(file.getName());
 
-        if(!(Boolean)inputStream.readObject()) {
+        if(!dataInputStream.readBoolean()) {
         	doesntExist = false;
         } else {
         	dataOutputStream.writeLong(file.length());
@@ -156,10 +191,36 @@ public class myCloud {
         return doesntExist;
     }
 
+    private static boolean getFile(Socket socket, String filePath, DataOutputStream dataOutputStream, DataInputStream dataInputStream) throws Exception{
+    	int bytes = 0;
+        boolean exist = true;
+
+		System.out.println("Requesting file: " + filePath);
+        dataOutputStream.writeUTF(filePath);
+
+        if(!(Boolean)dataInputStream.readBoolean()) {
+        	exist = false;
+        } else {
+        	FileOutputStream fileOutputStream = new FileOutputStream(filePath);
+
+        	long size = dataInputStream.readLong();
+
+		    byte[] buffer = new byte[1024];
+			while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+				fileOutputStream.write(buffer, 0, bytes);
+				size -= bytes;
+			}
+
+			System.out.println("Received file: " + filePath);
+			fileOutputStream.close();
+        }
+    	return exist;
+    }
+
     private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
         OutputStream outputStream = socket.getOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        ObjectInputStream inputStream = new ObjectInputStream(socket.getInputStream());
+        DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
 
         dataOutputStream.writeInt(0); //send command
         dataOutputStream.writeInt(filenames.size());
@@ -182,14 +243,46 @@ public class myCloud {
             //cifra chave simetrica com a chaver privada
             File encryptedKey = encryptKeyFile(secretKey, publicKey, filePath);
 
-            //envia ficheiro cifrado ao servidorz
-            if (!sendFile(socket, encryptedFile, dataOutputStream, inputStream)) {
+            //envia ficheiro cifrado ao servidor
+            if (!sendFile(socket, encryptedFile, dataOutputStream, dataInputStream)) {
                 System.err.println("File already exists on server: " + encryptedFile);
             }
             //envia  chave simetrica cifrada ao servidor
-            if (!sendFile(socket, encryptedKey, dataOutputStream, inputStream)) {
+            if (!sendFile(socket, encryptedKey, dataOutputStream, dataInputStream)) {
                 System.err.println("File already exists on server: " + encryptedKey);
             }
+    	}
+    }
+    private static void receibeFile(Socket socket, List<String> filePaths) throws Exception {
+        OutputStream outputStream = socket.getOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+
+        dataOutputStream.writeInt(1); //send command
+        dataOutputStream.writeInt(filenames.size());
+        
+    	for (String filePath : filePaths) {
+    		if (filePath.endsWith(".cifrado")) {
+    			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + filePath);
+    			}
+    			String fileKey = filePath.substring(0, filePath.lastIndexOf(".")) + ".chave_secreta";
+    			if (!getFile(socket, fileKey, dataOutputStream, dataInputStream)) {
+    				System.err.println("File doesn't exists on server: " + fileKey);
+    			}
+
+    			//obter chave privada
+    			FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
+    			KeyStore kstore = KeyStore.getInstance("PKCS12");
+    			kstore.load(kfile2, "123123".toCharArray()); // password
+    			Key privateKey = kstore.getKey("maria", "123123".toCharArray());
+
+    			//obter chave simetrica
+    			SecretKey secretKey = decryptKeyFile(fileKey, privateKey);
+
+    			//decifrar ficheiro
+    			decryptFileSecret(filePath, secretKey);
+    		}
     	}
     }
 }
