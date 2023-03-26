@@ -8,14 +8,14 @@
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.io.InputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 
 
 public class myCloudServer {
@@ -73,19 +73,23 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
+					DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
 					DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
+					int n_files = 0;
 					switch (command) {
 						case 0: //receive files 
-							int n_files = dataInputStream.readInt();
+							n_files = dataInputStream.readInt();
 							for (int i = 0; i < n_files*2; i++){
 								receiveFile(socket, dataInputStream, outputStream);
 							}
 							break;
 						case 1: //send files 
-							// TODO
+							n_files = dataInputStream.readInt();
+							for (int i = 0; i < n_files*2; i++){
+								sendFile(socket, dataInputStream, outputStream);
+							}
 							break;
 					}
 
@@ -100,19 +104,19 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket, DataInputStream dataInputStream, ObjectOutputStream outputStream) throws Exception{
+		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream outputStream) throws Exception{
 			int bytes = 0;
 
 			String fileName = dataInputStream.readUTF();
-			System.out.println("Receibed file:" + fileName);
+			System.out.println("Receiving file:" + fileName);
 
 			File directory = new File("serverFiles");
 			File file = new File(directory, fileName);
 			if (file.exists()) {
 				System.err.println("File already exists");
-				outputStream.writeObject(false);
+				outputStream.writeBoolean(false);
 			}else {
-				outputStream.writeObject(true);
+				outputStream.writeBoolean(true);
 				FileOutputStream fileOutputStream = new FileOutputStream(file);
 
 				long size = dataInputStream.readLong();
@@ -125,6 +129,32 @@ public class myCloudServer {
 
 				System.out.println("Received file: " + file);
 				fileOutputStream.close();
+			}
+		}
+		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+			int bytes = 0;
+
+			String fileName = dataInputStream.readUTF();
+			System.out.println("Requested file:" + fileName);
+
+
+			File file = new File("serverFiles", fileName);
+			if (!file.exists()) {
+				System.err.println("File doesn't exist");
+				dataOutputStream.writeBoolean(false);
+			}else {
+				FileInputStream fileInputStream = new FileInputStream(file); 
+				dataOutputStream.writeBoolean(true);
+
+				dataOutputStream.writeLong(file.length());
+				byte[] buffer = new byte[1024];
+				while ((bytes = fileInputStream.read(buffer)) != -1) {
+					dataOutputStream.write(buffer, 0, bytes);
+					dataOutputStream.flush();
+				}
+
+				fileInputStream.close();
+				System.out.println("Sent file: " + file);
 			}
 		}
 	}
