@@ -16,6 +16,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 
 
 public class myCloudServer {
@@ -104,36 +105,48 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream outputStream) throws Exception{
-			int bytes = 0;
+		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream outputStream)
+                throws Exception {
+            int bytes = 0;
 
-			String fileName = dataInputStream.readUTF();
-			System.out.println("Receiving file: " + fileName);
+            try {
 
-			File directory = new File("serverFiles");
-			if (!directory.exists()){
-				directory.mkdir();
-			}
-			File file = new File(directory, fileName);
-			if (file.exists()) {
-				System.err.println("File already exists");
-				outputStream.writeBoolean(false);
-			}else {
-				outputStream.writeBoolean(true);
-				FileOutputStream fileOutputStream = new FileOutputStream(file);
+                String fileName = dataInputStream.readUTF();
+                System.out.println("Receiving file: " + fileName);
 
-				long size = dataInputStream.readLong();
+                File directory = new File("serverFiles");
+                if (!directory.exists()) {
+                    directory.mkdir();
+                }
+                File file = new File(directory, fileName);
+                if (file.exists()) {
+                    System.err.println("File already exists");
+                    outputStream.writeBoolean(false);
+                } else {
+                    outputStream.writeBoolean(true);
+                    FileOutputStream fileOutputStream = new FileOutputStream(file);
 
-				byte[] buffer = new byte[1024];
-				while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-					fileOutputStream.write(buffer, 0, bytes);
-					size -= bytes;
-				}
+                    long size = dataInputStream.readLong();
 
-				System.out.println("Received file: " + file);
-				fileOutputStream.close();
-			}
-		}
+                    byte[] buffer = new byte[1024];
+                    while (size > 0
+                            && (bytes = dataInputStream.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
+                        fileOutputStream.write(buffer, 0, bytes);
+                        size -= bytes;
+                    }
+
+                    System.out.println("Received file: " + file);
+                    fileOutputStream.close();
+                }
+            } catch (EOFException e) {
+                System.err.println("Unexpected end of file while reading file name.");
+                e.printStackTrace();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }
+
 		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
 			int bytes = 0;
 
