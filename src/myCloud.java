@@ -5,284 +5,157 @@
    Marco Martins 41938
    João Nobre 51659
 */
-import java.util.ArrayList;
-import java.util.List;
 
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.CipherInputStream;
-
-import java.io.DataOutputStream;
-import java.io.DataInputStream;
-import java.io.OutputStream;
-import java.io.FileInputStream;  	
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.InputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
-import java.security.Key;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 
-public class myCloud {
 
-    private static ArrayList<String> filenames;
+public class myCloudServer {
 
-    public static void main(String[] args) throws Exception {
-        String address = "localhost";
-        int port = 9999;
-        String mode = "";
-        filenames = new ArrayList<String>();
-
-        // Check if arguments were provided
-        if (args.length == 0) {
-            System.out.println("Usage: myCloud -a <serverAddress> -c {<filenames>}+");
-            System.out.println("myCloud -a <serverAddress> -s {<filenames>}+");
-            System.out.println("myCloud -a <serverAddress> -e {<filenames>}+");
-            System.out.println("myCloud -a <serverAddress> -g {<filenames>}+");
+	public static void main(String[] args) {
+		System.out.println("servidor: main");
+		myCloudServer server = new myCloudServer();
+		if (args.length == 0) {
+            System.out.println("Usage: myCloudServer <serverPort>");
             return;
         }
+		server.startServer(Integer.parseInt(args[0]));
+	}
 
-        // Parse command line arguments
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("-a")) {
-                // Get server address
-                String[] parts = args[i+1].split(":");
-                address = parts[0];
-                port = Integer.parseInt(parts[1]);
-                i++;
-            } else if (args[i].equals("-c") || args[i].equals("-s") || args[i].equals("-e") || args[i].equals("-g")) {
-                // Get command (c, s, e, or g)
-                mode = args[i].substring(1);
-                i++;
-                // Get filenames
-                while (i < args.length && !args[i].startsWith("-")) {
-                    filenames.add(args[i]);
-                    i++;
-                }
-                i--;
-            }
-        }
-
-        //connect to socket
-		Socket socket = new Socket(address, port);
-
-        // Perform action based on command
-        switch (mode) {
-            case "c":
-            	sendEncryptedFile(socket, filenames);
-                break;
-            case "s":
-                // TODO assina
-                break;
-            case "e":
-                // TODO cifra e assina
-                break;
-            case "g":
-                // TODO recebe
-            	receibeFile(socket, filenames);
-                break;
-            default:
-                System.out.println("Invalid command specified.");
-                break;
-        }
+	public void startServer (int port){
+		ServerSocket sSoc = null;
         
-        socket.close();
-    }
-    
-    private static File encryptFileSecret(String filePath, SecretKey key) throws Exception {
-	    Cipher c = Cipher.getInstance("AES");
-	    c.init(Cipher.ENCRYPT_MODE, key);
+		try {
+			sSoc = new ServerSocket(port);
+		} catch (IOException e) {
+			System.err.println(e.getMessage());
+			System.exit(-1);
+		}
+         
+		while(true) {
+			try {
+				Socket inSoc = sSoc.accept();
+				ServerThread newServerThread = new ServerThread(inSoc);
+				newServerThread.start();
+		    }
+		    catch (IOException e) {
+		        e.printStackTrace();
+				break;
+		    }
+		    
+		}
+		try {
+			sSoc.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 
-    	FileInputStream fis = new FileInputStream(filePath);
-	    FileOutputStream fos = new FileOutputStream(filePath + ".cifrado");
 
-	    CipherOutputStream cos = new CipherOutputStream(fos, c);
-	    byte[] b = new byte[16];  
-	    int i = fis.read(b);
-	    while (i != -1) {
-	        cos.write(b, 0, i);
-	        i = fis.read(b);
-	    }
-	    cos.close();
-	    fis.close();
-        File file = new File(filePath + ".cifrado");
-    	return file;
-    }
+	//Threads utilizadas para comunicacao com os clientes
+	class ServerThread extends Thread {
 
-    private static void decryptFileSecret(String filePath, SecretKey key) throws Exception {
-        Cipher c = Cipher.getInstance("AES");
-        c.init(Cipher.DECRYPT_MODE, key);
+		private Socket socket = null;
 
-        FileInputStream fis = new FileInputStream(filePath);
-        CipherInputStream cis = new CipherInputStream(fis, c);
-
-        String decryptedFilePath = filePath.substring(0, filePath.lastIndexOf("."));
-        FileOutputStream fos = new FileOutputStream(decryptedFilePath);
-
-        byte[] b = new byte[256];
-        int i = cis.read(b);
-        while (i != -1) {
-            fos.write(b, 0, i);
-            i = cis.read(b);
-        }
-
-        fos.close();
-        cis.close();
-        fis.close();
-    }
-
-    private static File encryptKeyFile(SecretKey secretKey, PublicKey publicKey, String filePath) throws Exception {
-        Cipher cRSA = Cipher.getInstance("RSA");
-        cRSA.init(Cipher.WRAP_MODE, publicKey);
-        byte[] encryptedSecretKey = cRSA.wrap(secretKey);
-        
-        //saves encrypted key on a file
-        FileOutputStream keyOutFile = new FileOutputStream(filePath + ".chave_secreta");
-        keyOutFile.write(encryptedSecretKey);
-        keyOutFile.close();
-        File file = new File(filePath + ".chave_secreta");
-    	return file;
-    }
-
-    private static SecretKey decryptKeyFile(String keyPath, Key privateKey) throws Exception {
-        FileInputStream encryptedKey = new FileInputStream(keyPath);
-        byte[] encryptedKeyBytes = new byte[encryptedKey.available()];
-        encryptedKey.read(encryptedKeyBytes);
-
-        Cipher c2 = Cipher.getInstance("RSA");
-        c2.init(Cipher.UNWRAP_MODE, privateKey);
-        SecretKey secretKey = (SecretKey) c2.unwrap(encryptedKeyBytes, "AES", Cipher.SECRET_KEY);
+		ServerThread(Socket inSoc) {
+			socket = inSoc;
+			System.out.println("thread do server para cada cliente");
+		}
  
-        encryptedKey.close();
-    	return secretKey;
-    }
+		public void run(){
+			try {
+				try {
+					DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
+					DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
 
-    private static boolean sendFile(Socket socket, File file, DataOutputStream dataOutputStream, DataInputStream dataInputStream) throws Exception{
-        int bytes = 0;
-        boolean doesntExist = true;
-        
-        FileInputStream fileInputStream = new FileInputStream(file); 
+					int command = dataInputStream.readInt();
+					int n_files = 0;
+					switch (command) {
+						case 0: //receive files 
+							n_files = dataInputStream.readInt();
+							for (int i = 0; i < n_files*2; i++){
+								receiveFile(socket, dataInputStream, outputStream);
+							}
+							break;
+						case 1: //send files 
+							n_files = dataInputStream.readInt();
+							for (int i = 0; i < n_files*2; i++){
+								sendFile(socket, dataInputStream, outputStream);
+							}
+							break;
+					}
 
-        dataOutputStream.writeUTF(file.getName());
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+ 			
+				socket.close();
 
-        if(!dataInputStream.readBoolean()) {
-        	doesntExist = false;
-        } else {
-        	dataOutputStream.writeLong(file.length());
-        	byte[] buffer = new byte[1024];
-        	while ((bytes = fileInputStream.read(buffer)) != -1) {
-        	    dataOutputStream.write(buffer, 0, bytes);
-        	    dataOutputStream.flush();
-        	}
-
-        	System.out.println("Sent file: " + file);
-        }
-
-        fileInputStream.close();
-        return doesntExist;
-    }
-
-    private static boolean getFile(Socket socket, String filePath, DataOutputStream dataOutputStream, DataInputStream dataInputStream) throws Exception{
-    	int bytes = 0;
-        boolean exist = true;
-
-		System.out.println("Requesting file: " + filePath);
-        dataOutputStream.writeUTF(filePath);
-
-        if(!(Boolean)dataInputStream.readBoolean()) {
-        	exist = false;
-        } else {
-        	FileOutputStream fileOutputStream = new FileOutputStream(filePath);
-
-        	long size = dataInputStream.readLong();
-
-		    byte[] buffer = new byte[1024];
-			while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-				fileOutputStream.write(buffer, 0, bytes);
-				size -= bytes;
+			} catch (IOException e) {
+				e.printStackTrace();
 			}
+		}
 
-			System.out.println("Received file: " + filePath);
-			fileOutputStream.close();
-        }
-    	return exist;
-    }
+		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream outputStream) throws Exception{
+			int bytes = 0;
 
-    private static void sendEncryptedFile(Socket socket, List<String> filePaths) throws Exception {
-        OutputStream outputStream = socket.getOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+			String fileName = dataInputStream.readUTF();
+			System.out.println("Receiving file:" + fileName);
 
-        dataOutputStream.writeInt(0); //send command
-        dataOutputStream.writeInt(filenames.size());
-        
-    	for (String filePath : filePaths) {
-            //gerar secretKey
-            KeyGenerator kg = KeyGenerator.getInstance("AES");
-	        kg.init(128);
-	        SecretKey secretKey = kg.generateKey();
+			File directory = new File("serverFiles");
+			File file = new File(directory, fileName);
+			if (file.exists()) {
+				System.err.println("File already exists");
+				outputStream.writeBoolean(false);
+			}else {
+				outputStream.writeBoolean(true);
+				FileOutputStream fileOutputStream = new FileOutputStream(file);
 
-	        //get privateKey from keystore
-	        FileInputStream kfile = new FileInputStream("keystore.maria");  //keystore
-	        KeyStore kstore = KeyStore.getInstance("PKCS12");
-	        kstore.load(kfile, "123123".toCharArray());           //password
-	        Certificate cert = kstore.getCertificate("maria");    //alias do utilizador
-	        PublicKey publicKey = cert.getPublicKey();
+				long size = dataInputStream.readLong();
 
-            //cifra ficheiro com chave simetrica
-            File encryptedFile = encryptFileSecret(filePath, secretKey);
-            //cifra chave simetrica com a chaver privada
-            File encryptedKey = encryptKeyFile(secretKey, publicKey, filePath);
+				byte[] buffer = new byte[1024];
+				while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+					fileOutputStream.write(buffer, 0, bytes);
+					size -= bytes;
+				}
 
-            //envia ficheiro cifrado ao servidor
-            if (!sendFile(socket, encryptedFile, dataOutputStream, dataInputStream)) {
-                System.err.println("File already exists on server: " + encryptedFile);
-            }
-            //envia  chave simetrica cifrada ao servidor
-            if (!sendFile(socket, encryptedKey, dataOutputStream, dataInputStream)) {
-                System.err.println("File already exists on server: " + encryptedKey);
-            }
-    	}
-    }
-    private static void receibeFile(Socket socket, List<String> filePaths) throws Exception {
-        OutputStream outputStream = socket.getOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+				System.out.println("Received file: " + file);
+				fileOutputStream.close();
+			}
+		}
+		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+			int bytes = 0;
 
-        dataOutputStream.writeInt(1); //send command
-        dataOutputStream.writeInt(filenames.size());
-        
-    	for (String filePath : filePaths) {
-    		if (filePath.endsWith(".cifrado")) {
-    			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
-    				System.err.println("File doesn't exists on server: " + filePath);
-    			}
-    			String fileKey = filePath.substring(0, filePath.lastIndexOf(".")) + ".chave_secreta";
-    			if (!getFile(socket, fileKey, dataOutputStream, dataInputStream)) {
-    				System.err.println("File doesn't exists on server: " + fileKey);
-    			}
+			String fileName = dataInputStream.readUTF();
+			System.out.println("Requested file:" + fileName);
 
-    			//obter chave privada
-    			FileInputStream kfile2 = new FileInputStream("keystore.maria"); // keystore
-    			KeyStore kstore = KeyStore.getInstance("PKCS12");
-    			kstore.load(kfile2, "123123".toCharArray()); // password
-    			Key privateKey = kstore.getKey("maria", "123123".toCharArray());
 
-    			//obter chave simetrica
-    			SecretKey secretKey = decryptKeyFile(fileKey, privateKey);
+			File file = new File("serverFiles", fileName);
+			if (!file.exists()) {
+				System.err.println("File doesn't exist");
+				dataOutputStream.writeBoolean(false);
+			}else {
+				FileInputStream fileInputStream = new FileInputStream(file); 
+				dataOutputStream.writeBoolean(true);
 
-    			//decifrar ficheiro
-    			decryptFileSecret(filePath, secretKey);
-    		}
-    	}
-    }
+				dataOutputStream.writeLong(file.length());
+				byte[] buffer = new byte[1024];
+				while ((bytes = fileInputStream.read(buffer)) != -1) {
+					dataOutputStream.write(buffer, 0, bytes);
+					dataOutputStream.flush();
+				}
+
+				fileInputStream.close();
+				System.out.println("Sent file: " + file);
+			}
+		}
+	}
 }
