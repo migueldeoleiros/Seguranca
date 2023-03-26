@@ -311,10 +311,10 @@ public class myCloud {
     	kstore.load(kfile2, "123123".toCharArray()); // password
 
         dataOutputStream.writeInt(1); //send command
-        dataOutputStream.writeInt(filenames.size());
         
     	for (String filePath : filePaths) {
     		if (filePath.endsWith(".cifrado")) {
+    			dataOutputStream.writeInt(filenames.size()*2);
     			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
     				System.err.println("File doesn't exists on server: " + filePath);
     			}
@@ -333,6 +333,7 @@ public class myCloud {
     			decryptFileSecret(filePath, secretKey);
 
     		} else if (filePath.endsWith(".assinado")) {
+    			dataOutputStream.writeInt(filenames.size()*2);
     			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
     				System.err.println("File doesn't exists on server: " + filePath);
     			}
@@ -351,10 +352,11 @@ public class myCloud {
     	        }
     	        
     		} else if (filePath.endsWith(".seguro")) {
+    			dataOutputStream.writeInt(filenames.size()*3);
     			if (!getFile(socket, filePath, dataOutputStream, dataInputStream)) {
     				System.err.println("File doesn't exists on server: " + filePath);
     			}
-    			String fileKey = filePath.substring(0, filePath.lastIndexOf(".")) + ".chave_secreta";
+    			String fileKey = filePath + ".chave_secreta";
     			if (!getFile(socket, fileKey, dataOutputStream, dataInputStream)) {
     				System.err.println("File doesn't exists on server: " + fileKey);
     			}

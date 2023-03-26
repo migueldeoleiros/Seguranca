@@ -87,7 +87,7 @@ public class myCloudServer {
 							break;
 						case 1: //send files 
 							n_files = dataInputStream.readInt();
-							for (int i = 0; i < n_files*2; i++){
+							for (int i = 0; i < n_files; i++){
 								sendFile(socket, dataInputStream, outputStream);
 							}
 							break;
