@@ -99,7 +99,7 @@ public class myCloudServer {
 			}
 		}
 
-		private static boolean checkServerFiles(String filePath) {
+		private boolean checkServerFiles(String filePath) {
 			File[] listFiles = new File("serverFiles").listFiles();
 
 			for(int i = 0; i < listFiles.length; i++) {
@@ -114,7 +114,7 @@ public class myCloudServer {
 			return false;
 		}
 
-		private static List<File> getFiles(String filePath) {
+		private List<File> getFiles(String filePath) {
 			File[] listFiles = new File("serverFiles").listFiles();
 			List<File> files = new ArrayList<File>();
 
@@ -129,7 +129,7 @@ public class myCloudServer {
 			return files;
 		}
 
-		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception {
+		private void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception {
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
@@ -175,7 +175,7 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+		private void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
