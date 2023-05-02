@@ -10,13 +10,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.InputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
+
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 
 
 public class myCloudServer {
@@ -74,23 +74,17 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
+					DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
 					DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
-					int n_files = 0;
+					
 					switch (command) {
 						case 0: //receive files 
-							n_files = dataInputStream.readInt();
-							for (int i = 0; i < n_files; i++){
-								receiveFile(socket, dataInputStream, outputStream);
-							}
+							receiveFile(socket, dataInputStream, dataOutputStream);
 							break;
 						case 1: //send files 
-							n_files = dataInputStream.readInt();
-							for (int i = 0; i < n_files; i++){
-								sendFile(socket, dataInputStream, outputStream);
-							}
+							sendFile(socket, dataInputStream, dataOutputStream);
 							break;
 					}
 
@@ -105,72 +99,116 @@ public class myCloudServer {
 			}
 		}
 
-		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream outputStream)
-                throws Exception {
-            int bytes = 0;
+		private static boolean checkServerFiles(String filePath) {
+			File[] listFiles = new File("serverFiles").listFiles();
 
-            try {
+			for(int i = 0; i < listFiles.length; i++) {
+				if(listFiles[i].isFile()){
+					String fileName = listFiles[i].getName();
+				
+					if (fileName.startsWith(filePath)){
+						return true;
+					}
+				}
+			}
+			return false;
+		}
 
-                String fileName = dataInputStream.readUTF();
-                System.out.println("Receiving file: " + fileName);
+		private static List<File> getFiles(String filePath) {
+			File[] listFiles = new File("serverFiles").listFiles();
+			List<File> files = new ArrayList<File>();
 
-                File directory = new File("serverFiles");
-                if (!directory.exists()) {
-                    directory.mkdir();
-                }
-                File file = new File(directory, fileName);
-                if (file.exists()) {
-                    System.err.println("File already exists");
-                    outputStream.writeBoolean(false);
-                } else {
-                    outputStream.writeBoolean(true);
-                    FileOutputStream fileOutputStream = new FileOutputStream(file);
+			for(int i = 0; i < listFiles.length; i++) {
+				if(listFiles[i].isFile()){
+					String fileName = listFiles[i].getName();	
+					if (fileName.startsWith(filePath)){
+						files.add(listFiles[i]);
+					}
+				}
+			}
+			return files;
+		}
 
-                    long size = dataInputStream.readLong();
+		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception {
+			int n_files = dataInputStream.readInt();
 
-                    byte[] buffer = new byte[1024];
-                    while (size > 0
-                            && (bytes = dataInputStream.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
-                        fileOutputStream.write(buffer, 0, bytes);
-                        size -= bytes;
-                    }
+			for (int i = 0; i < n_files; i++){
 
-                    System.out.println("Received file: " + file);
-                    fileOutputStream.close();
-                }
-            } catch (EOFException e) {
-                System.err.println("Unexpected end of file while reading file name.");
-                e.printStackTrace();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+				int bytes = 0;
 
-        }
+				String fileName = dataInputStream.readUTF();
+				System.out.println("Requested file: " + fileName);
 
-		private static void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
-			int bytes = 0;
+				File directory = new File("serverFiles");
+				if (!directory.exists()){
+					directory.mkdir();
+				}
+				
+				File file = new File(directory, fileName);
 
-			String fileName = dataInputStream.readUTF();
-			System.out.println("Requested file:" + fileName);
+				if (!checkServerFiles(file.getName())) {
+					System.out.println("File doesn't exist");
+					dataOutputStream.writeBoolean(true);
+				} else {
+					dataOutputStream.writeBoolean(false);	
 
+					List<File> files = getFiles(file.getName());
 
-			File file = new File("serverFiles", fileName);
-			if (!file.exists()) {
-				System.err.println("File doesn't exist");
-				dataOutputStream.writeBoolean(false);
-			}else {
-				FileInputStream fileInputStream = new FileInputStream(file); 
-				dataOutputStream.writeBoolean(true);
+					dataOutputStream.writeInt(files.size());
 
-				dataOutputStream.writeLong(file.length());
-				byte[] buffer = new byte[1024];
-				while ((bytes = fileInputStream.read(buffer)) != -1) {
-					dataOutputStream.write(buffer, 0, bytes);
-					dataOutputStream.flush();
+					for (File serverFile : files) {
+						FileInputStream fileInputStream = new FileInputStream(serverFile); 
+						
+						System.out.println(serverFile.getName());
+						dataOutputStream.writeUTF(serverFile.getName());
+						dataOutputStream.writeLong(serverFile.length());
+						byte[] buffer = new byte[1024];
+						while ((bytes = fileInputStream.read(buffer)) != -1) {
+							dataOutputStream.write(buffer, 0, bytes);
+							dataOutputStream.flush();
+						}
+
+						fileInputStream.close();
+						System.out.println("Sent file : " + serverFile.getName());
+					}
+				}
+			}
+		}
+
+		private static void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+			int n_files = dataInputStream.readInt();
+
+			for (int i = 0; i < n_files; i++){
+				int bytes = 0;
+
+				String fileName = dataInputStream.readUTF();
+				System.out.println("Receiving file: " + fileName);
+
+				File directory = new File("serverFiles");
+				if (!directory.exists()){
+					directory.mkdir();
 				}
 
-				fileInputStream.close();
-				System.out.println("Sent file: " + file);
+				File file = new File(directory, fileName);
+
+				if (file.exists()) {
+					System.err.println("File already exists");
+					dataOutputStream.writeBoolean(true);
+				} else {
+					dataOutputStream.writeBoolean(false);
+					FileOutputStream fileOutputStream = new FileOutputStream(file);
+
+					long size = dataInputStream.readLong();
+
+					byte[] buffer = new byte[1024];
+					while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+						fileOutputStream.write(buffer, 0, bytes);
+						size -= bytes;
+					}
+
+					System.out.println("Received file: " + file);
+					fileOutputStream.close();
+				}
 			}
 		}
 	}
