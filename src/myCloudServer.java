@@ -18,11 +18,17 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLServerSocketFactory;
+
 
 public class myCloudServer {
 
 	public static void main(String[] args) {
 		System.out.println("servidor: main");
+		System.setProperty("javax.net.ssl.keyStore", "keystore.server");
+		System.setProperty("javax.net.ssl.keyStorePassword", "123123");
+
 		myCloudServer server = new myCloudServer();
 		if (args.length == 0) {
             System.out.println("Usage: myCloudServer <serverPort>");
@@ -35,7 +41,8 @@ public class myCloudServer {
 		ServerSocket sSoc = null;
         
 		try {
-			sSoc = new ServerSocket(port);
+			ServerSocketFactory ssf = SSLServerSocketFactory.getDefault( );
+			sSoc = ssf.createServerSocket(port);
 		} catch (IOException e) {
 			System.err.println(e.getMessage());
 			System.exit(-1);
@@ -74,8 +81,10 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream());
-					DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
+					DataOutputStream dataOutputStream =
+                        new DataOutputStream(socket.getOutputStream());
+					DataInputStream dataInputStream =
+                        new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
 					
@@ -129,7 +138,8 @@ public class myCloudServer {
 			return files;
 		}
 
-		private void sendFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception {
+		private void sendFile(Socket socket, DataInputStream dataInputStream,
+                              DataOutputStream dataOutputStream) throws Exception {
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
@@ -157,7 +167,8 @@ public class myCloudServer {
 					dataOutputStream.writeInt(files.size());
 
 					for (File serverFile : files) {
-						FileInputStream fileInputStream = new FileInputStream(serverFile); 
+						FileInputStream fileInputStream =
+                            new FileInputStream(serverFile); 
 						
 						System.out.println(serverFile.getName());
 						dataOutputStream.writeUTF(serverFile.getName());
@@ -175,12 +186,11 @@ public class myCloudServer {
 			}
 		}
 
-		private void receiveFile(Socket socket, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+		private void receiveFile(Socket socket, DataInputStream dataInputStream,
+                                 DataOutputStream dataOutputStream) throws Exception{
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
-				int bytes = 0;
-
 				String fileName = dataInputStream.readUTF();
 				System.out.println("Receiving file: " + fileName);
 
@@ -201,10 +211,15 @@ public class myCloudServer {
 					long size = dataInputStream.readLong();
 
 					byte[] buffer = new byte[1024];
-					while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-						fileOutputStream.write(buffer, 0, bytes);
-						size -= bytes;
-					}
+                    while (size > 0) {
+                        int bufferSize = (int) Math.min(buffer.length, size);
+                        int bytesRead = dataInputStream.read(buffer, 0, bufferSize);
+                        if (bytesRead == -1) {
+                            break;
+                        }
+                        fileOutputStream.write(buffer, 0, bytesRead);
+                        size -= bytesRead;
+                    }
 
 					System.out.println("Received file: " + file);
 					fileOutputStream.close();
