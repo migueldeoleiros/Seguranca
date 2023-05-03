@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocketFactory;
+
 import client.Command;
 
 public class myCloud {
@@ -19,6 +22,9 @@ public class myCloud {
     private static String mode;
 
     public static void main(String[] args) throws Exception {
+		System.setProperty("javax.net.ssl.trustStore", "truststore.client");
+		System.setProperty("javax.net.ssl.trustStorePassword", "123123");	
+
         String address = "localhost";
         int port = 9999;
         List<String> filenames = new ArrayList<String>();
@@ -58,7 +64,8 @@ public class myCloud {
             System.out.println("No files provided.");
         } else {
             //connect to socket
-            Socket socket = new Socket(address, port);
+            SocketFactory sf = SSLSocketFactory.getDefault( );
+            Socket socket = sf.createSocket(address, port);
 
             FileInputStream kfile = new FileInputStream("keystore.maria"); // keystore
             
