@@ -31,28 +31,36 @@ public class Command {
     private static String alias;
     private static Certificate cert;
     private static KeyStore kstore;
-    private static String kstorePassword;
+    private String password;
+    private String username;
 
-    private static List<String> filenames;
 
     private static DataOutputStream dataOutputStream;
     private static DataInputStream dataInputStream;
 
 
-    public Command(Socket socket, List<String> files,
-                  KeyStore keystore, String password) throws Exception {
+    public Command(Socket socket, String username,
+                   String password) throws Exception {
         dataOutputStream = new DataOutputStream(socket.getOutputStream());
         dataInputStream = new DataInputStream(socket.getInputStream());
 
-        kstore = keystore;
-        kstorePassword = password;
+        FileInputStream kfile = new FileInputStream(username + ".keystore");
+        try{
+            kstore = KeyStore.getInstance("PKCS12");
+            kstore.load(kfile, password.toCharArray()); // senha
+        } catch (Exception e) {
+            System.out.println("Keystore's password is incorrect.");
+            System.exit(-1);
+        }
+
+        this.password = password;
+        this.username = username;
         alias = kstore.aliases().nextElement();
         cert = kstore.getCertificate(alias);
 
-        filenames = files;
     }
 
-    public void c() throws Exception{
+    public void c(String recipient, List<String> filenames) throws Exception{
         dataOutputStream.writeInt(0); //send command
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
@@ -96,10 +104,10 @@ public class Command {
         }
     }
 
-    public void s() throws Exception{
+    public void s(String recipient, List<String> filenames) throws Exception{
         // Chave privada do assinante -> keystore
         PrivateKey privateKey =
-            (PrivateKey) kstore.getKey(alias, kstorePassword.toCharArray());
+            (PrivateKey) kstore.getKey(alias, password.toCharArray());
 
         dataOutputStream.writeInt(0); // send command
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
@@ -131,10 +139,10 @@ public class Command {
         }
     }
     
-    public void e() throws Exception{
+    public void e(String recipient, List<String> filenames) throws Exception{
         // Chave privada do assinante -> keystore
         PrivateKey privateKey =
-            (PrivateKey) kstore.getKey(alias, kstorePassword.toCharArray());
+            (PrivateKey) kstore.getKey(alias, password.toCharArray());
             
         PublicKey publicKey = cert.getPublicKey();
         
@@ -188,10 +196,10 @@ public class Command {
         }
     }
 
-    public void g() throws Exception{
+    public void g(List<String> filenames) throws Exception{
         //obter chave privada
         PrivateKey privateKey =
-            (PrivateKey) kstore.getKey(alias, kstorePassword.toCharArray());
+            (PrivateKey) kstore.getKey(alias, password.toCharArray());
         
         X509Certificate cert2 = (X509Certificate) kstore.getCertificate(alias);
         
@@ -235,6 +243,10 @@ public class Command {
         }
     }
 
+    public void au(String username, String password,
+                   String certificate) throws Exception {
+
+    }
     private static void decryptReceivedFile(List<String> serverFiles,
                                             String filePath, X509Certificate cert,
                                             PrivateKey privateKey) throws Exception {
