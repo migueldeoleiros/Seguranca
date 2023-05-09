@@ -5,12 +5,9 @@
    Marco Martins 41938
    João Nobre 51659
 */
-import java.io.FileInputStream;
 import java.net.Socket;
-import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -54,10 +51,10 @@ public class myCloud {
                 i++;
             } else if (args[i].equals("-au")) {
                 // Get username, password and certificate
+                mode = args[i].substring(1);
                 username = args[i+1];
                 password = args[i+2];
                 certificate = args[i+3];
-                i += 3;
                 break;
             } else if (args[i].equals("-u")) {
                 // Get username
@@ -90,7 +87,8 @@ public class myCloud {
             recipient = username;
         }
 
-        if (filenames.isEmpty()){
+        if (filenames.isEmpty() &&
+            (mode == "c" || mode == "s" || mode == "e" || mode == "g")){
             System.out.println("No files provided.");
         } else {
             //connect to socket
