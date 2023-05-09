@@ -7,8 +7,8 @@ JFLAGS = -d bin -cp bin
 	$(JC) $(JFLAGS) $*.java
 
 CLASSES = \
-	src/myCloud.java \
 	src/client/Command.java \
+	src/myCloud.java \
 	src/myCloudServer.java
 
 default: classes
