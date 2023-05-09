@@ -1,33 +1,36 @@
 package client;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.CipherInputStream;
-
-import java.io.DataOutputStream;
+import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.DataOutputStream;
 import java.io.File;
-
+import java.io.FileWriter;
 import java.net.Socket;
-
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.sql.Array;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.CipherOutputStream;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
 public class Command {
     private static String alias;
@@ -46,6 +49,11 @@ public class Command {
         dataOutputStream = new DataOutputStream(socket.getOutputStream());
         dataInputStream = new DataInputStream(socket.getInputStream());
 
+        this.password = password;
+        this.username = username;
+    }
+
+    private void loadKeyStore() throws Exception{
         FileInputStream kfile = new FileInputStream("certificados/" + username + ".keystore");
         try{
             kstore = KeyStore.getInstance("PKCS12");
@@ -54,12 +62,8 @@ public class Command {
             System.out.println("Keystore's password is incorrect.");
             System.exit(-1);
         }
-
-        this.password = password;
-        this.username = username;
         alias = kstore.aliases().nextElement();
         cert = kstore.getCertificate(alias);
-
     }
 
     public void c(String recipient, List<String> filenames) throws Exception{
@@ -103,6 +107,7 @@ public class Command {
         }
         
         //get privateKey
+        loadKeyStore();
         PublicKey publicKey = cert.getPublicKey();
 
         for (String filePath : filenames) {
@@ -147,6 +152,11 @@ public class Command {
     }
 
     public void s(String recipient, List<String> filenames) throws Exception{
+        // Chave privada do assinante -> keystore
+        loadKeyStore();
+        PrivateKey privateKey =
+            (PrivateKey) kstore.getKey(alias, password.toCharArray());
+
         dataOutputStream.writeInt(0); // send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
@@ -184,9 +194,6 @@ public class Command {
         } else {
             dataOutputStream.writeBoolean(false);
         }
-
-        // Chave privada do assinante -> keystore
-        PrivateKey privateKey = (PrivateKey) kstore.getKey(alias, password.toCharArray());
 
         for (String filePath : filenames) {
             File file = new File(filePath);
@@ -260,6 +267,7 @@ public class Command {
         }
 
         // Chave privada do assinante -> keystore
+        loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
             
@@ -322,6 +330,7 @@ public class Command {
 
     public void g(List<String> filenames) throws Exception{
         //obter chave privada
+        loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
         
@@ -355,25 +364,42 @@ public class Command {
 
     public void au(String username, String password,
                    String certificate) throws Exception {
+        byte[] salt = createSalt();
+        String passwordHash = hashPassword(password, salt);
+        
+        // Append to the users file
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("users", true))) {
+            writer.write(username + ";" + passwordHash + ";" +
+                         Base64.getEncoder().encodeToString(salt));
+            writer.newLine();
+        }
 
     }
 
-    private static void receiveFile(String filename) throws Exception{
-        int bytes = 0;
-        
-        //read file
-        FileOutputStream fileOutputStream = new FileOutputStream(filename);
-        
-        long size = dataInputStream.readLong();
-        
-        byte[] buffer = new byte[1024];
-        while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-            fileOutputStream.write(buffer, 0, bytes);
-            size -= bytes;
+    private static byte[] createSalt() throws Exception {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[16];
+        random.nextBytes(salt);
+        return salt;
+    }
+
+    private static String hashPassword(String password, byte[] salt) throws Exception{
+        String passwordHash = null;
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        md.update(salt);
+        byte[] bytes = md.digest(password.getBytes());
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
         }
-        
-        System.out.println("Received file: " + filename);
-        fileOutputStream.close();
+        passwordHash = sb.toString();
+        return passwordHash;
+    }
+
+    public static boolean verifyPassword(String hash, byte[] salt,
+                                         String password) throws Exception {
+        String computedHash = hashPassword(password, salt);
+        return hash.equals(computedHash);
     }
 
     private static void decryptReceivedFile(List<String> serverFiles,
@@ -415,6 +441,24 @@ public class Command {
                                    " não passa a verificação da assinatura");
 	        }
         }
+    }
+
+    private static void receiveFile(String filename) throws Exception{
+        int bytes = 0;
+        
+        //read file
+        FileOutputStream fileOutputStream = new FileOutputStream(filename);
+        
+        long size = dataInputStream.readLong();
+        
+        byte[] buffer = new byte[1024];
+        while (size > 0 && (bytes = dataInputStream.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+            fileOutputStream.write(buffer, 0, bytes);
+            size -= bytes;
+        }
+        
+        System.out.println("Received file: " + filename);
+        fileOutputStream.close();
     }
 
     private static List<File> signFile (File file, PrivateKey privateKey,
