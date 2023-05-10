@@ -87,10 +87,13 @@ public class myCloudServer {
                         new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
+
+					String username = dataInputStream.readUTF();
+					System.out.println(username);
 					
 					switch (command) {
 						case 0: //receive files 
-							receiveFile(socket, dataInputStream, dataOutputStream);
+							receiveFile(username, socket, dataInputStream, dataOutputStream);
 							break;
 						case 1: //send files 
 							sendFile(socket, dataInputStream, dataOutputStream);
@@ -186,7 +189,7 @@ public class myCloudServer {
 			}
 		}
 
-		private void receiveFile(Socket socket, DataInputStream dataInputStream,
+		private void receiveFile(String username, Socket socket, DataInputStream dataInputStream,
                                  DataOutputStream dataOutputStream) throws Exception{
 			int n_files = dataInputStream.readInt();
 
@@ -199,7 +202,12 @@ public class myCloudServer {
 					directory.mkdir();
 				}
 
-				File file = new File(directory, fileName);
+				File userDirectory = new File(directory, username);
+				if (!userDirectory.exists()){
+					userDirectory.mkdir();
+				}
+
+				File file = new File(userDirectory, fileName);
 
 				if (file.exists()) {
 					System.err.println("File already exists");

@@ -60,9 +60,17 @@ public class Command {
 
     }
 
+    //Falta ter a chave publica do utilizador recetor
     public void c(String recipient, List<String> filenames) throws Exception{
         dataOutputStream.writeInt(0); //send command
+
+        dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
+
+        String extension = "";
+        if (username != recipient){
+            extension = "." + username;
+        }
         
         //get privateKey
         PublicKey publicKey = cert.getPublicKey();
@@ -77,13 +85,14 @@ public class Command {
                 SecretKey secretKey = kg.generateKey();
                 
                 //cifra ficheiro com chave simetrica
-                File encryptedFile = encryptFileSecret(file, secretKey, ".cifrado");
+                File encryptedFile = encryptFileSecret(file, secretKey, ".cifrado" + extension);
                 //cifra chave simetrica com a chaver privada
-                File encryptedKey = encryptKeyFile(file, secretKey, publicKey);
+                File encryptedKey = encryptKeyFile(file, secretKey, publicKey, ".chave_secreta" + extension);
 
                 //envia ficheiro cifrado para o servidor
                 if(!existsOnServer(encryptedFile, dataOutputStream, dataInputStream)){
                     sendFile(encryptedFile, dataOutputStream, dataInputStream);
+                    encryptedFile.delete();
                 } else {
                     System.out.println("The file \"" + encryptedFile.getName() +
                                        "\" already exists on server.");
@@ -92,6 +101,7 @@ public class Command {
                 //envia a chave secreta para o servidor
                 if(!existsOnServer(encryptedKey, dataOutputStream, dataInputStream)){
                     sendFile(encryptedKey, dataOutputStream, dataInputStream);
+                    encryptedKey.delete();
                 } else {
                     System.out.println("The file \"" + encryptedKey.getName() +
                                        "\" already exists on server.");
@@ -163,7 +173,7 @@ public class Command {
                 //cifra ficheiro com chave simetrica
                 File securedFile = encryptFileSecret(files.get(0), secretKey, "");
                 //cifra chave simetrica com a chaver privada
-                File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey);
+                File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey, "");
                 
                 //envia o ficheiro seguro para o servidor
                 if(!existsOnServer(securedFile, dataOutputStream, dataInputStream)){
@@ -247,6 +257,7 @@ public class Command {
                    String certificate) throws Exception {
 
     }
+    
     private static void decryptReceivedFile(List<String> serverFiles,
                                             String filePath, X509Certificate cert,
                                             PrivateKey privateKey) throws Exception {
@@ -397,17 +408,17 @@ public class Command {
     }
 
     private static File encryptKeyFile(File file, SecretKey secretKey,
-                                       PublicKey publicKey) throws Exception {
+                                       PublicKey publicKey, String extension) throws Exception {
         Cipher cRSA = Cipher.getInstance("RSA");
         cRSA.init(Cipher.WRAP_MODE, publicKey);
         byte[] encryptedSecretKey = cRSA.wrap(secretKey);
         
         //saves encrypted key on a file
         FileOutputStream keyOutFile = new FileOutputStream(file.getName() +
-                                                           ".chave_secreta");
+                                                           extension);
         keyOutFile.write(encryptedSecretKey);
         keyOutFile.close();
-        File keyFile = new File(file.getName() + ".chave_secreta");
+        File keyFile = new File(file.getName() + extension);
     	return keyFile;
     }
 
