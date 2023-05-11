@@ -1,10 +1,12 @@
 package client;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -54,7 +56,7 @@ public class Command {
     }
 
     private void loadKeyStore() throws Exception{
-        FileInputStream kfile = new FileInputStream("certificados/" + username + ".keystore");
+        FileInputStream kfile = new FileInputStream("certificates/" + username + ".keystore");
         try{
             kstore = KeyStore.getInstance("PKCS12");
             kstore.load(kfile, password.toCharArray()); // senha
@@ -66,7 +68,29 @@ public class Command {
         cert = kstore.getCertificate(alias);
     }
 
+    private static boolean verifyUserCredentials(String username,
+                                                 String password) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader("users"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(";");
+                if (parts[0].equals(username)) {
+                    byte[] salt = Base64.getDecoder().decode(parts[2]);
+                    String storedHash = parts[1];
+                    String computedHash = hashPassword(password, salt);
+                    return storedHash.equals(computedHash);
+                }
+            }
+        }
+        return false;
+    }
+
     public void c(String recipient, List<String> filenames) throws Exception{
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
+            return;
+        }
+
         dataOutputStream.writeInt(0); //send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
@@ -76,7 +100,7 @@ public class Command {
         if (!username.equals(recipient)){
             extension = "." + username;
             
-            File certFile = new File("certificados/" + recipient + ".keystore");
+            File certFile = new File("certificates/" + recipient + ".keystore");
             
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
@@ -84,7 +108,7 @@ public class Command {
                     System.out.println("Certificate of " + recipient + " can't be found locally or in the server");
                     System.exit(-1);
                 } else {
-                    receiveFile("certificados/" + certFile.getName());
+                    receiveFile("certificates/" + certFile.getName());
                 }
             } else {
                 dataOutputStream.writeBoolean(false);
@@ -152,6 +176,11 @@ public class Command {
     }
 
     public void s(String recipient, List<String> filenames) throws Exception{
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
+            return;
+        }
+
         // Chave privada do assinante -> keystore
         loadKeyStore();
         PrivateKey privateKey =
@@ -165,7 +194,7 @@ public class Command {
         if (!username.equals(recipient)){
             extension = "." + username;
 
-            File certFile = new File("certificados/" + recipient + ".keystore");
+            File certFile = new File("certificates/" + recipient + ".keystore");
 
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
@@ -173,7 +202,7 @@ public class Command {
                     System.out.println("Certificate of " + recipient + " can't be found locally or in the server");
                     System.exit(-1);
                 } else {
-                    receiveFile("certificados/" + certFile.getName());
+                    receiveFile("certificates/" + certFile.getName());
                 }
             } else {
                 dataOutputStream.writeBoolean(false);
@@ -227,6 +256,10 @@ public class Command {
     }
     
     public void e(String recipient, List<String> filenames) throws Exception{
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
+            return;
+        }
         e_option = true;
         dataOutputStream.writeInt(0); // send command
         dataOutputStream.writeUTF(recipient);
@@ -236,7 +269,7 @@ public class Command {
         if (!username.equals(recipient)){
             extension = "." + username;
             
-            File certFile = new File("certificados/" + recipient + ".keystore");
+            File certFile = new File("certificates/" + recipient + ".keystore");
             
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
@@ -244,7 +277,7 @@ public class Command {
                     System.out.println("Certificate of " + recipient + " can't be found locally or in the server");
                     System.exit(-1);
                 } else {
-                    receiveFile("certificados/" + certFile.getName());
+                    receiveFile("certificates/" + certFile.getName());
                 }
             } else {
                 dataOutputStream.writeBoolean(false);
@@ -329,6 +362,10 @@ public class Command {
     }
 
     public void g(List<String> filenames) throws Exception{
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
+            return;
+        }
         //obter chave privada
         loadKeyStore();
         PrivateKey privateKey =
