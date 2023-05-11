@@ -281,22 +281,24 @@ public class Command {
                 //cifra chave simetrica com a chaver privada
                 File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey, extension);
                 
+                
+
                 //envia o ficheiro seguro para o servidor
                 if(!existsOnServer(securedFile, dataOutputStream, dataInputStream)){
                     sendFile(securedFile, dataOutputStream, dataInputStream);
-                    // securedFile.delete();
+                    securedFile.delete();
                 } else {
-                    // securedFile.delete();
+                    securedFile.delete();
                     System.out.println("The file \"" + securedFile.getName() +
                                        "\" already exists on server.");
                 }
-                
+
                 //envia a assinatura para o servidor
                 if(!existsOnServer(files.get(1), dataOutputStream, dataInputStream)){
                     sendFile(files.get(1), dataOutputStream, dataInputStream);
-                    // files.get(1).delete();
+                    files.get(1).delete();
                 } else {
-                    // files.get(1).delete();
+                    files.get(1).delete();
                     System.out.println("The file \"" + files.get(1).getName() +
                                        "\" already exists on server.");
                 }
@@ -304,9 +306,9 @@ public class Command {
                 //envia a chave secreta para o servidor
                 if(!existsOnServer(encryptedKey, dataOutputStream, dataInputStream)){
                     sendFile(encryptedKey, dataOutputStream, dataInputStream);
-                    // encryptedKey.delete();
+                    encryptedKey.delete();
                 } else {
-                    // encryptedKey.delete();
+                    encryptedKey.delete();
                     System.out.println("The file \"" + encryptedKey.getName() +
                                        "\" already exists on server.");
                 }
@@ -490,7 +492,12 @@ public class Command {
 	    cos.close();
 	    fis.close();
         
-        encryptedFile = new File(file.getName() + ".cifrado" + extension);        
+        if (e_option){
+            encryptedFile = new File(file.getName() + ".seguro" + extension);;
+        } else {
+            encryptedFile = new File(file.getName() + ".cifrado" + extension);
+        }
+        
         return encryptedFile;
     }
 
@@ -550,7 +557,6 @@ public class Command {
     private static boolean existsOnServer(File file, DataOutputStream dataOutputStream,
                                           DataInputStream dataInputStream)
         throws Exception {
-
         dataOutputStream.writeUTF(file.getName());
         return dataInputStream.readBoolean();
     }

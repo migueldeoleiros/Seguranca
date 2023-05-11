@@ -221,8 +221,6 @@ public class myCloudServer {
 			for (int i = 0; i < n_files; i++){
 				String fileName = dataInputStream.readUTF();
 
-				System.out.println(fileName);
-
 				System.out.println("Receiving file: " + fileName);
 
 				File directory = new File("serverFiles", recipient);
