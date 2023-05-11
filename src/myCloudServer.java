@@ -89,7 +89,6 @@ public class myCloudServer {
 					int command = dataInputStream.readInt();
 
 					String username = dataInputStream.readUTF();
-					System.out.println(username);
 					
 					switch (command) {
 						case 0: //receive files 
@@ -152,12 +151,7 @@ public class myCloudServer {
 				String fileName = dataInputStream.readUTF();
 				System.out.println("Requested file: " + fileName);
 
-				File directory = new File("serverFiles");
-				if (!directory.exists()){
-					directory.mkdir();
-				}
-				
-				File file = new File(directory, fileName);
+				File file = new File(fileName);
 
 				if (!checkServerFiles(file.getName())) {
 					System.out.println("File doesn't exist");
@@ -193,21 +187,12 @@ public class myCloudServer {
                                  DataOutputStream dataOutputStream) throws Exception{
 			int n_files = dataInputStream.readInt();
 
-			for (int i = 0; i < n_files; i++){
+			for (int i = 0; i < n_files; i++){ 
 				String fileName = dataInputStream.readUTF();
+				System.out.println(i);
 				System.out.println("Receiving file: " + fileName);
 
-				File directory = new File("serverFiles");
-				if (!directory.exists()){
-					directory.mkdir();
-				}
-
-				File userDirectory = new File(directory, username);
-				if (!userDirectory.exists()){
-					userDirectory.mkdir();
-				}
-
-				File file = new File(userDirectory, fileName);
+				File file = new File(fileName);
 
 				if (file.exists()) {
 					System.err.println("File already exists");
