@@ -35,7 +35,7 @@ public class Command {
     private static KeyStore kstore;
     private String password;
     private String username;
-
+    private static boolean e_option = false;
 
     private static DataOutputStream dataOutputStream;
     private static DataInputStream dataInputStream;
@@ -67,15 +67,13 @@ public class Command {
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
-        //get privateKey
-        PublicKey publicKey = cert.getPublicKey();
-
+        
         String extension = "";
         if (!username.equals(recipient)){
             extension = "." + username;
-
+            
             File certFile = new File("certificados/" + recipient + ".keystore");
-
+            
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
                 if (!existsCertFileServer(certFile, dataOutputStream, dataInputStream)){
@@ -87,9 +85,9 @@ public class Command {
             } else {
                 dataOutputStream.writeBoolean(false);
             }
-
+            
             FileInputStream kfile = new FileInputStream(certFile);
-
+            
             try{
                 kstore = KeyStore.getInstance("PKCS12");
                 kstore.load(kfile, password.toCharArray()); // senha
@@ -97,13 +95,15 @@ public class Command {
                 System.out.println("Keystore's password is incorrect.");
                 System.exit(-1);
             }
-
+            
             alias = kstore.aliases().nextElement();
             cert = kstore.getCertificate(alias);
         } else {
             dataOutputStream.writeBoolean(false);
         }
-
+        
+        //get privateKey
+        PublicKey publicKey = cert.getPublicKey();
 
         for (String filePath : filenames) {
             File file = new File(filePath);
@@ -220,14 +220,50 @@ public class Command {
     }
     
     public void e(String recipient, List<String> filenames) throws Exception{
+        e_option = true;
+        dataOutputStream.writeInt(0); // send command
+        dataOutputStream.writeUTF(recipient);
+        dataOutputStream.writeInt(numberValidFiles(filenames)*3);
+
+        String extension = "";
+        if (!username.equals(recipient)){
+            extension = "." + username;
+            
+            File certFile = new File("certificados/" + recipient + ".keystore");
+            
+            if (!certFile.exists()){
+                dataOutputStream.writeBoolean(true);
+                if (!existsCertFileServer(certFile, dataOutputStream, dataInputStream)){
+                    System.out.println("Certificate of " + recipient + " can't be found locally or in the server");
+                    System.exit(-1);
+                } else {
+                    receiveFile("certificados/" + certFile.getName());
+                }
+            } else {
+                dataOutputStream.writeBoolean(false);
+            }
+            
+            FileInputStream kfile = new FileInputStream(certFile);
+            
+            try{
+                kstore = KeyStore.getInstance("PKCS12");
+                kstore.load(kfile, password.toCharArray()); // senha
+            } catch (Exception e) {
+                System.out.println("Keystore's password is incorrect.");
+                System.exit(-1);
+            }
+            
+            alias = kstore.aliases().nextElement();
+            cert = kstore.getCertificate(alias);
+        } else {
+            dataOutputStream.writeBoolean(false);
+        }
+
         // Chave privada do assinante -> keystore
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
             
         PublicKey publicKey = cert.getPublicKey();
-        
-        dataOutputStream.writeInt(0); // send command
-        dataOutputStream.writeInt(numberValidFiles(filenames)*3);
 
         for (String filePath : filenames) {
             File file = new File(filePath);
@@ -238,17 +274,19 @@ public class Command {
                 kg.init(128);
                 SecretKey secretKey = kg.generateKey();
                 
-                List<File> files = signFile(file, privateKey, ".seguro");
+                List<File> files = signFile(file, privateKey, extension);
                 
                 //cifra ficheiro com chave simetrica
-                File securedFile = encryptFileSecret(files.get(0), secretKey, "");
+                File securedFile = encryptFileSecret(files.get(0), secretKey, extension);
                 //cifra chave simetrica com a chaver privada
-                File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey);
+                File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey, extension);
                 
                 //envia o ficheiro seguro para o servidor
                 if(!existsOnServer(securedFile, dataOutputStream, dataInputStream)){
                     sendFile(securedFile, dataOutputStream, dataInputStream);
+                    // securedFile.delete();
                 } else {
+                    // securedFile.delete();
                     System.out.println("The file \"" + securedFile.getName() +
                                        "\" already exists on server.");
                 }
@@ -256,7 +294,9 @@ public class Command {
                 //envia a assinatura para o servidor
                 if(!existsOnServer(files.get(1), dataOutputStream, dataInputStream)){
                     sendFile(files.get(1), dataOutputStream, dataInputStream);
+                    // files.get(1).delete();
                 } else {
+                    // files.get(1).delete();
                     System.out.println("The file \"" + files.get(1).getName() +
                                        "\" already exists on server.");
                 }
@@ -264,7 +304,9 @@ public class Command {
                 //envia a chave secreta para o servidor
                 if(!existsOnServer(encryptedKey, dataOutputStream, dataInputStream)){
                     sendFile(encryptedKey, dataOutputStream, dataInputStream);
+                    // encryptedKey.delete();
                 } else {
+                    // encryptedKey.delete();
                     System.out.println("The file \"" + encryptedKey.getName() +
                                        "\" already exists on server.");
                 }
@@ -377,8 +419,15 @@ public class Command {
                                         String extension) throws Exception{
         List<File> files = new ArrayList<File>();
         
-        File signedFile = new File(file.getName() + ".assinado" + extension);
-        File signatureFile = null;
+        File signedFile = null;
+        File signatureFile = new File(file.getName() + ".assinatura" + extension);
+
+        if (e_option){
+            signedFile = new File(file.getName());
+        } else {
+            signedFile = new File(file.getName() + ".assinado" + extension);
+        }
+        
 
         Files.copy(file.toPath(), signedFile.toPath(),
                    StandardCopyOption.REPLACE_EXISTING);
@@ -393,12 +442,6 @@ public class Command {
             signature.update(buffer, 0, n);
         }
         fileInputStream.close();
-        
-        if (extension == ".seguro"){
-            signatureFile = new File(file.getName() + extension + ".assinatura");
-        } else {
-            signatureFile = new File(file.getName() + ".assinatura" + extension);
-        }
 
         FileOutputStream fileOutputStream = new FileOutputStream(signatureFile);
         fileOutputStream.write(signature.sign());
@@ -431,7 +474,11 @@ public class Command {
 	    FileOutputStream fos = null;
         File encryptedFile = null;
 
-        fos = new FileOutputStream(file.getName() + ".cifrado" + extension);
+        if (e_option){
+            fos = new FileOutputStream(file.getName() + ".seguro" + extension);
+        } else {
+            fos = new FileOutputStream(file.getName() + ".cifrado" + extension);
+        }
 
 	    CipherOutputStream cos = new CipherOutputStream(fos, c);
 	    byte[] b = new byte[16];  
@@ -523,7 +570,6 @@ public class Command {
 
         System.out.println("Sent file: " + file);
         
-
         fileInputStream.close();
 
     }
