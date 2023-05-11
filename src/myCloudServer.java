@@ -9,6 +9,7 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -87,12 +88,11 @@ public class myCloudServer {
                         new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
-
-					String username = dataInputStream.readUTF();
+					String recipient = dataInputStream.readUTF();
 					
 					switch (command) {
 						case 0: //receive files 
-							receiveFile(username, socket, dataInputStream, dataOutputStream);
+							receiveFile(recipient, socket, dataInputStream, dataOutputStream);
 							break;
 						case 1: //send files 
 							sendFile(socket, dataInputStream, dataOutputStream);
@@ -151,7 +151,12 @@ public class myCloudServer {
 				String fileName = dataInputStream.readUTF();
 				System.out.println("Requested file: " + fileName);
 
-				File file = new File(fileName);
+				File directory = new File("serverFiles");
+				if (!directory.exists()){
+					directory.mkdir();
+				}
+				
+				File file = new File(directory, fileName);
 
 				if (!checkServerFiles(file.getName())) {
 					System.out.println("File doesn't exist");
@@ -183,16 +188,47 @@ public class myCloudServer {
 			}
 		}
 
-		private void receiveFile(String username, Socket socket, DataInputStream dataInputStream,
+		private void sendCertFile (File certFile, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+			int bytes = 0;
+			FileInputStream fileInputStream = new FileInputStream(certFile); 
+						
+			dataOutputStream.writeLong(certFile.length());
+
+			byte[] buffer = new byte[1024];
+			while ((bytes = fileInputStream.read(buffer)) != -1) {
+				dataOutputStream.write(buffer, 0, bytes);
+				dataOutputStream.flush();
+			}
+
+			fileInputStream.close();
+			System.out.println("Sent file : " + certFile.getName());
+		}
+
+		private void receiveFile(String recipient, Socket socket, DataInputStream dataInputStream,
                                  DataOutputStream dataOutputStream) throws Exception{
 			int n_files = dataInputStream.readInt();
 
-			for (int i = 0; i < n_files; i++){ 
+			if (dataInputStream.readBoolean()){
+				File certFile = new File("serverFiles/certificados/" + recipient + ".keystore");
+				if (!certFile.exists()){
+					dataOutputStream.writeBoolean(false);
+				} else {
+					dataOutputStream.writeBoolean(true);
+					sendCertFile(certFile, dataInputStream, dataOutputStream);
+				}
+			}
+
+			for (int i = 0; i < n_files; i++){
 				String fileName = dataInputStream.readUTF();
-				System.out.println(i);
+
+				System.out.println(fileName);
+
 				System.out.println("Receiving file: " + fileName);
 
-				File file = new File(fileName);
+				File directory = new File("serverFiles", recipient);
+				directory.mkdirs();
+
+				File file = new File(directory, fileName);
 
 				if (file.exists()) {
 					System.err.println("File already exists");
