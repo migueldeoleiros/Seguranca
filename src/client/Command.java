@@ -113,24 +113,9 @@ public class Command {
                 File encryptedKey = encryptKeyFile(file, secretKey, publicKey, extension);
 
                 //envia ficheiro cifrado para o servidor
-                if(!existsOnServer(encryptedFile)){
-                    sendFile(encryptedFile);
-                    encryptedFile.delete();
-                } else {
-                    encryptedFile.delete();
-                    System.out.println("The file \"" + encryptedFile.getName() +
-                                       "\" already exists on server.");
-                }
-
+                sendFileIfNotExistsOnServer(encryptedFile);
                 //envia a chave secreta para o servidor
-                if(!existsOnServer(encryptedKey)){
-                    sendFile(encryptedKey);
-                    encryptedKey.delete();
-                } else {
-                    encryptedKey.delete();
-                    System.out.println("The file \"" + encryptedKey.getName() +
-                                       "\" already exists on server.");
-                }
+                sendFileIfNotExistsOnServer(encryptedKey);
 
             } else {
                 System.out.println("The file \"" + filePath +
@@ -162,24 +147,10 @@ public class Command {
                 List<File> files = signFile(file, privateKey, extension);
                 
                 //envia o ficheiro assinado para o servidor
-                if(!existsOnServer(files.get(0))){
-                    sendFile(files.get(0));
-                    files.get(0).delete();
-                } else {
-                    files.get(0).delete();
-                    System.out.println("The file \"" + files.get(0).getName() +
-                                       "\" already exists on server.");
-                }
-                
+                sendFileIfNotExistsOnServer(files.get(0));
                 //envia a assinatura para o servidor
-                if(!existsOnServer(files.get(1))){
-                    sendFile(files.get(1));
-                    files.get(1).delete();
-                } else {
-                    files.get(1).delete();
-                    System.out.println("The file \"" + files.get(1).getName() +
-                                       "\" already exists on server.");
-                }
+                sendFileIfNotExistsOnServer(files.get(1));
+
             } else {
                 System.out.println("The file \"" + filePath +
                                    "\" doesnt's exist locally.");
@@ -189,7 +160,6 @@ public class Command {
     
     public void e(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
             return;
         }
         e_option = true;
@@ -223,36 +193,12 @@ public class Command {
                 //cifra chave simetrica com a chaver privada
                 File encryptedKey = encryptKeyFile(files.get(0), secretKey, publicKey, extension);
                 
-                
                 //envia o ficheiro seguro para o servidor
-                if(!existsOnServer(securedFile)){
-                    sendFile(securedFile);
-                    securedFile.delete();
-                } else {
-                    securedFile.delete();
-                    System.out.println("The file \"" + securedFile.getName() +
-                                       "\" already exists on server.");
-                }
-
+                sendFileIfNotExistsOnServer(securedFile);
                 //envia a assinatura para o servidor
-                if(!existsOnServer(files.get(1))){
-                    sendFile(files.get(1));
-                    files.get(1).delete();
-                } else {
-                    files.get(1).delete();
-                    System.out.println("The file \"" + files.get(1).getName() +
-                                       "\" already exists on server.");
-                }
-                
+                sendFileIfNotExistsOnServer(files.get(1));
                 //envia a chave secreta para o servidor
-                if(!existsOnServer(encryptedKey)){
-                    sendFile(encryptedKey);
-                    encryptedKey.delete();
-                } else {
-                    encryptedKey.delete();
-                    System.out.println("The file \"" + encryptedKey.getName() +
-                                       "\" already exists on server.");
-                }
+                sendFileIfNotExistsOnServer(encryptedKey);
                 
             } else {
                 System.out.println("The file \"" + filePath +
@@ -263,7 +209,6 @@ public class Command {
 
     public void g(List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
             return;
         }
         //obter chave privada
@@ -351,7 +296,7 @@ public class Command {
             
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
-                if (!existsCertFileServer(certFile)){
+                if (!dataInputStream.readBoolean()){ //check if certificate exists on server
                     System.out.println("Certificate of " + recipient +
                                        " can't be found locally or in the server");
                     System.exit(-1);
@@ -572,8 +517,14 @@ public class Command {
     	return keyFile;
     }
 
-    private static boolean existsCertFileServer(File file) throws Exception{
-        return dataInputStream.readBoolean();
+    public void sendFileIfNotExistsOnServer(File file) throws Exception {
+        if (!existsOnServer(file)) {
+            sendFile(file);
+            file.delete();
+        } else {
+            file.delete();
+            System.out.println("The file \"" + file.getName() + "\" already exists on server.");
+        }
     }
 
     private static boolean existsOnServer(File file) throws Exception {
