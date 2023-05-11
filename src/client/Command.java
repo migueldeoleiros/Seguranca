@@ -78,12 +78,12 @@ public class Command {
                 }
             }
         }
-        System.out.println("username or pasword are incorrect");
         return false;
     }
 
     public void c(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
             return;
         }
 
@@ -126,6 +126,7 @@ public class Command {
 
     public void s(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
             return;
         }
 
@@ -160,6 +161,7 @@ public class Command {
     
     public void e(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
             return;
         }
         e_option = true;
@@ -209,6 +211,7 @@ public class Command {
 
     public void g(List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
+            System.out.println("username or pasword are incorrect");
             return;
         }
         //obter chave privada
@@ -246,6 +249,11 @@ public class Command {
 
     public void au(String username, String password,
                    String certificate) throws Exception {
+        if(verifyUserCredentials(username, password)){
+            System.out.println("User already exists");
+            return;
+        }
+
         byte[] salt = createSalt();
         String passwordHash = hashPassword(password, salt);
         
@@ -256,6 +264,8 @@ public class Command {
             writer.newLine();
         }
 
+
+        // TODO send certificate to server
     }
 
     private static byte[] createSalt() throws Exception {
@@ -290,6 +300,7 @@ public class Command {
         }
         return "";
     }
+
     private void handleCertificates(String recipient, String extension) throws Exception{
         if (!username.equals(recipient)){
             File certFile = new File("certificates/" + recipient + ".keystore");
