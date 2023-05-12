@@ -112,7 +112,7 @@ public class myCloud {
                 }
                     break;
                 case "g": {
-                    command.g(filenames);
+                    command.g(recipient, filenames);
                 }
                     break;
                 case "au": {

@@ -16,6 +16,7 @@ import java.io.DataOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.net.ServerSocketFactory;
@@ -94,7 +95,7 @@ public class myCloudServer {
 							receiveFile(recipient, socket, dataInputStream, dataOutputStream);
 							break;
 						case 1: //send files 
-							sendFile(socket, dataInputStream, dataOutputStream);
+							sendFile(recipient, socket, dataInputStream, dataOutputStream);
 							break;
 					}
 
@@ -109,23 +110,20 @@ public class myCloudServer {
 			}
 		}
 
-		private boolean checkServerFiles(String filePath) {
-			File[] listFiles = new File("serverFiles").listFiles();
+		private boolean checkServerFiles(String filePath, String recipient) {
+			File[] listFiles = new File("serverFiles", recipient).listFiles();
 
+			filePath = filePath.replaceAll("\\.(seguro|cifrado|assinatura|assinado|chave_secreta" + recipient +")$", "");
 			for(int i = 0; i < listFiles.length; i++) {
-				if(listFiles[i].isFile()){
-					String fileName = listFiles[i].getName();
-				
-					if (fileName.startsWith(filePath)){
-						return true;
-					}
+				if (listFiles[i].getName().startsWith(filePath)) {
+					return true;
 				}
 			}
 			return false;
 		}
 
-		private List<File> getFiles(String filePath) {
-			File[] listFiles = new File("serverFiles").listFiles();
+		private List<File> getFiles(String filePath, String recipient) {
+			File[] listFiles = new File("serverFiles", recipient).listFiles();
 			List<File> files = new ArrayList<File>();
 
 			for(int i = 0; i < listFiles.length; i++) {
@@ -139,7 +137,19 @@ public class myCloudServer {
 			return files;
 		}
 
-		private void sendFile(Socket socket, DataInputStream dataInputStream,
+		private String checkFileRecipient(String filePath){
+			String[] extensions = {"cifrado", "chave_secreta", "assinado", "assinatura", "seguro"};
+        	int lastDotIndex = filePath.lastIndexOf(".");
+    		filePath = filePath.substring(lastDotIndex + 1, filePath.length());
+
+			if (Arrays.asList(extensions).contains(filePath)){
+				return "";
+			} else {
+				return filePath;
+			}
+		}
+
+		private void sendFile(String recipient, Socket socket, DataInputStream dataInputStream,
                               DataOutputStream dataOutputStream) throws Exception {
 			int n_files = dataInputStream.readInt();
 
@@ -150,28 +160,42 @@ public class myCloudServer {
 				String fileName = dataInputStream.readUTF();
 				System.out.println("Requested file: " + fileName);
 
-				File directory = new File("serverFiles");
+				
+				File directory = new File("serverFiles", recipient);
 				if (!directory.exists()){
 					directory.mkdir();
 				}
 				
 				File file = new File(directory, fileName);
-
-				if (!checkServerFiles(file.getName())) {
+			
+				if (!checkServerFiles(file.getName(), recipient)) {
 					System.out.println("File doesn't exist");
 					dataOutputStream.writeBoolean(true);
 				} else {
 					dataOutputStream.writeBoolean(false);	
 
-					List<File> files = getFiles(file.getName());
+					List<File> files = getFiles(file.getName(), recipient);
 
+					String extension = checkFileRecipient(files.get(0).getName());
+
+					dataOutputStream.writeUTF(extension);
+
+					if (dataInputStream.readBoolean()){
+						File certFile = new File("serverFiles/certificates/" + recipient + ".keystore");
+						if (!certFile.exists()){
+							dataOutputStream.writeBoolean(false);
+						} else {
+							dataOutputStream.writeBoolean(true);
+							sendCertFile(certFile, dataInputStream, dataOutputStream);
+						}
+					}
+					
 					dataOutputStream.writeInt(files.size());
 
 					for (File serverFile : files) {
 						FileInputStream fileInputStream =
                             new FileInputStream(serverFile); 
-						
-						System.out.println(serverFile.getName());
+				
 						dataOutputStream.writeUTF(serverFile.getName());
 						dataOutputStream.writeLong(serverFile.length());
 						byte[] buffer = new byte[1024];
