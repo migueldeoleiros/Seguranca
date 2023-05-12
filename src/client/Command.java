@@ -11,6 +11,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -19,7 +20,6 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.Certificate;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -83,7 +83,7 @@ public class Command {
 
     public void c(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
+            System.out.println("Username or password are incorrect");
             return;
         }
 
@@ -92,7 +92,7 @@ public class Command {
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
         String extension = getFileExtension(recipient);
-        handleCertificates(recipient, extension);
+        handleCertificates(recipient);
 
         //get privateKey
         loadKeyStore();
@@ -126,7 +126,7 @@ public class Command {
 
     public void s(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
+            System.out.println("Username or password are incorrect");
             return;
         }
 
@@ -140,13 +140,13 @@ public class Command {
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
 
         String extension = getFileExtension(recipient);
-        handleCertificates(recipient, extension);
+        handleCertificates(recipient);
 
         for (String filePath : filenames) {
             File file = new File(filePath);
             if (file.exists()){
                 List<File> files = signFile(file, privateKey, extension);
-                
+
                 //envia o ficheiro assinado para o servidor
                 sendFileIfNotExistsOnServer(files.get(0));
                 //envia a assinatura para o servidor
@@ -161,7 +161,7 @@ public class Command {
     
     public void e(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
+            System.out.println("Username or password are incorrect");
             return;
         }
         e_option = true;
@@ -170,7 +170,7 @@ public class Command {
         dataOutputStream.writeInt(numberValidFiles(filenames)*3);
 
         String extension = getFileExtension(recipient);
-        handleCertificates(recipient, extension);
+        handleCertificates(recipient);
 
         // Chave privada do assinante -> keystore
         loadKeyStore();
@@ -209,9 +209,9 @@ public class Command {
         }
     }
 
-    public void g(List<String> filenames) throws Exception{
+    public void g(String recipient, List<String> filenames) throws Exception{
         if(!verifyUserCredentials(username, password)){
-            System.out.println("username or pasword are incorrect");
+            System.out.println("Username or password are incorrect");
             return;
         }
         //obter chave privada
@@ -219,31 +219,48 @@ public class Command {
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
         
-        X509Certificate cert2 = (X509Certificate) kstore.getCertificate(alias);
         
         dataOutputStream.writeInt(1); //send command
+        dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(filenames.size());
         
         for (String filePath : filenames) {
             List<String> serverFiles = new ArrayList<String>();
             
+            String extension = "";
             dataOutputStream.writeUTF(filePath);
             
             if (dataInputStream.readBoolean()){
                 System.out.println("File doesn't exist on server");
             } else {
+                extension = dataInputStream.readUTF();
+
+                if (!(extension.equals(""))){
+                    handleCertificates(extension);
+
+                    privateKey =
+                        (PrivateKey) kstore.getKey(alias, password.toCharArray());
+                    extension = "." + extension;
+                } else {
+                    dataOutputStream.writeBoolean(false);
+                }
+
                 int n_files = dataInputStream.readInt();
                 
                 for (int i = 0; i < n_files; i++){
                     //read utf
                     String filename = dataInputStream.readUTF();
                     serverFiles.add(filename);
-                    
+
                     receiveFile(filename);
                 }
             }
             
-            decryptReceivedFile(serverFiles, filePath, cert2, privateKey);
+            decryptReceivedFile(serverFiles, filePath, cert, privateKey, extension);
+            for (String file : serverFiles){
+                File file2 = new File(file);
+                file2.delete();
+            }
         }
     }
 
@@ -288,7 +305,7 @@ public class Command {
         return passwordHash;
     }
 
-    public static boolean verifyPassword(String hash, byte[] salt,
+    public static boolean verifyPassword(String hash, byte[] salt,  
                                          String password) throws Exception {
         String computedHash = hashPassword(password, salt);
         return hash.equals(computedHash);
@@ -301,7 +318,7 @@ public class Command {
         return "";
     }
 
-    private void handleCertificates(String recipient, String extension) throws Exception{
+    private void handleCertificates(String recipient) throws Exception{
         if (!username.equals(recipient)){
             File certFile = new File("certificates/" + recipient + ".keystore");
             
@@ -337,20 +354,26 @@ public class Command {
     }
 
     private static void decryptReceivedFile(List<String> serverFiles,
-                                            String filePath, X509Certificate cert,
-                                            PrivateKey privateKey) throws Exception {
-        if (serverFiles.contains(filePath + ".cifrado")
-            && serverFiles.contains(filePath + ".chave_secreta")){
+                                            String filePath, Certificate cert,
+                                            PrivateKey privateKey, String extension) throws Exception {
+        if (serverFiles.contains(filePath + ".cifrado" + extension)
+            && serverFiles.contains(filePath + ".chave_secreta" + extension)){
 
-            File encryptedFile = new File(serverFiles.get(0));
-            File encryptedKey = new File(serverFiles.get(1));
+            File encryptedFile = new File(filePath + ".cifrado" + extension);
+            File encryptedKey = new File(filePath + ".chave_secreta" + extension);
 
-    		decryptFile(encryptedFile, encryptedKey, privateKey);
+    		decryptFile(encryptedFile, encryptedKey, privateKey, filePath);
 
-        } else if (serverFiles.contains(filePath + ".assinado")
-                   && serverFiles.contains(filePath + ".assinatura")){
+        } else if (serverFiles.contains(filePath + ".assinado" + extension)
+                   && serverFiles.contains(filePath + ".assinatura" + extension)){
+            
+            File signedFile = new File(filePath + ".assinado" + extension);
+            File signatureFile = new File(filePath + ".assinatura" + extension);
+
+            Files.copy(signedFile.toPath(), Paths.get(filePath));
+
             boolean signatureStatus =
-                verifySignature(serverFiles.get(0), serverFiles.get(1), cert);
+                verifySignature(signedFile.getName(), signatureFile.getName(), cert);
             if(signatureStatus) {
                 System.out.println(filePath + " verificado");
             } else {
@@ -358,16 +381,17 @@ public class Command {
                                    " não passa a verificação da assinatura");
             }
 
-        } else if (serverFiles.contains(filePath + ".seguro")
-                   && serverFiles.contains(filePath + ".seguro.assinatura")
-                   && serverFiles.contains(filePath + ".seguro.chave_secreta")){
-            File encryptedFile = new File(serverFiles.get(0));
-            File encryptedKey = new File(serverFiles.get(2));
+        } else if (serverFiles.contains(filePath + ".seguro" + extension)
+                   && serverFiles.contains(filePath + ".seguro.assinatura" + extension)
+                   && serverFiles.contains(filePath + ".seguro.chave_secreta" + extension)){
+            
+            File encryptedFile = new File(filePath + ".seguro" + extension);
+            File encryptedKey = new File(filePath + ".seguro.chave_secreta" + extension);
 
-            decryptFile(encryptedFile, encryptedKey, privateKey);
+            decryptFile(encryptedFile, encryptedKey, privateKey, filePath);
 
 	        boolean signatureStatus = verifySignature(filePath,
-                                                      serverFiles.get(1), cert);
+                                    filePath + ".seguro.assinatura" + extension, cert);
 	        if(signatureStatus) {
 				System.out.println(filePath + " verificado");
 	        } else {
@@ -397,40 +421,42 @@ public class Command {
 
     private static List<File> signFile (File file, PrivateKey privateKey,
                                         String extension) throws Exception{
-        List<File> files = new ArrayList<File>();
-        
-        File signedFile = null;
-        File signatureFile = new File(file.getName() + ".assinatura" + extension);
+            List<File> files = new ArrayList<File>();
 
-        if (e_option){
-            signedFile = new File(file.getName());
-        } else {
-            signedFile = new File(file.getName() + ".assinado" + extension);
-        }
-        
-
-        Files.copy(file.toPath(), signedFile.toPath(),
-                   StandardCopyOption.REPLACE_EXISTING);
-
-        Signature signature = Signature.getInstance("SHA256withRSA");
-        signature.initSign(privateKey);
-
-        FileInputStream fileInputStream= new FileInputStream(signedFile);
-        byte[] buffer = new byte[1024];
-        int n;
-        while ((n = fileInputStream.read(buffer)) != -1) {
-            signature.update(buffer, 0, n);
-        }
-        fileInputStream.close();
-
-        FileOutputStream fileOutputStream = new FileOutputStream(signatureFile);
-        fileOutputStream.write(signature.sign());
-        fileOutputStream.close();
-
-        files.add(signedFile);
-        files.add(signatureFile);
-
-        return files;
+            File signedFile = null;
+            File signatureFile = null;
+    
+            if (e_option){
+                signedFile = new File(file.getName());
+                signatureFile = new File(file.getName() + ".seguro" + ".assinatura" + extension);
+            } else {
+                signedFile = new File(file.getName() + ".assinado" + extension);
+                signatureFile = new File(file.getName() + ".assinatura" + extension);
+            }
+            
+    
+            Files.copy(file.toPath(), signedFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING);
+    
+            Signature signature = Signature.getInstance("SHA256withRSA");
+            signature.initSign(privateKey);
+    
+            FileInputStream fileInputStream= new FileInputStream(file);
+            byte[] buffer = new byte[1024];
+            int n;
+            while ((n = fileInputStream.read(buffer)) != -1) {
+                signature.update(buffer, 0, n);
+            }
+            fileInputStream.close();
+    
+            FileOutputStream fileOutputStream = new FileOutputStream(signatureFile);
+            fileOutputStream.write(signature.sign());
+            fileOutputStream.close();
+    
+            files.add(signedFile);
+            files.add(signatureFile);
+    
+            return files;
     }
 
     private static int numberValidFiles(List<String> filenames){
@@ -480,7 +506,7 @@ public class Command {
     }
 
     private static void decryptFile(File encryptedFile, File encryptedKey,
-                                    PrivateKey privateKey) throws Exception{
+                                    PrivateKey privateKey, String filePath) throws Exception{
         FileInputStream fisEncryptedKey = new FileInputStream(encryptedKey);
         byte[] encryptedKeyBytes = new byte[fisEncryptedKey.available()];
         fisEncryptedKey.read(encryptedKeyBytes);
@@ -497,9 +523,7 @@ public class Command {
         FileInputStream fisEncryptedFile = new FileInputStream(encryptedFile);
         CipherInputStream cis = new CipherInputStream(fisEncryptedFile, c);
 
-        String decryptedFileName = encryptedFile.getName()
-            .substring(0, encryptedFile.getName().lastIndexOf("."));
-        FileOutputStream fos = new FileOutputStream(decryptedFileName);
+        FileOutputStream fos = new FileOutputStream(filePath);
 
         byte[] b = new byte[256];
         int i = cis.read(b);
@@ -520,11 +544,21 @@ public class Command {
         byte[] encryptedSecretKey = cRSA.wrap(secretKey);
         
         //saves encrypted key on a file
-        FileOutputStream keyOutFile = new FileOutputStream(file.getName() +
-                                                           ".chave_secreta" + extension);
+        FileOutputStream keyOutFile = null;
+        if (e_option){
+            keyOutFile = new FileOutputStream(file.getName() + ".seguro" + ".chave_secreta" + extension);
+        } else {
+            keyOutFile = new FileOutputStream(file.getName() + ".chave_secreta" + extension);
+        }
+        
         keyOutFile.write(encryptedSecretKey);
         keyOutFile.close();
-        File keyFile = new File(file.getName() + ".chave_secreta" + extension);
+        File keyFile = null;
+        if (e_option) {
+            keyFile = new File(file.getName() + ".seguro" + ".chave_secreta" + extension);
+        } else {
+            keyFile = new File(file.getName() + ".chave_secreta" + extension);
+        }
     	return keyFile;
     }
 
@@ -534,7 +568,7 @@ public class Command {
             file.delete();
         } else {
             file.delete();
-            System.out.println("The file \"" + file.getName() + "\" already exists on server.");
+            System.out.println("The file \"" + file.getName().replaceAll("\\.(seguro|cifrado|assinatura|assinado|chave_secreta)$", "") + "\" already exists on server.");
         }
     }
 
@@ -562,15 +596,15 @@ public class Command {
     }
 
     private static boolean verifySignature(String filePath, String signaturePath,
-                                           X509Certificate cert) throws Exception{
-        FileInputStream file = new FileInputStream(filePath);
+                                           Certificate cert) throws Exception{
+        FileInputStream fileInputStream = new FileInputStream(filePath);
         
         byte [] buffer = new byte [16];
         Signature s = Signature.getInstance("SHA256withRSA");
         s.initVerify(cert);
         
         int n;
-        while((n = file.read(buffer))!= -1) {
+        while((n = fileInputStream.read(buffer))!= -1) {
         	s.update(buffer,0,n);
         }
         
@@ -580,7 +614,7 @@ public class Command {
         boolean boolSignature = s.verify(signature);
         
         fileSignature.close();
-        file.close();
+        fileInputStream.close();
 
         return (boolSignature);
     }
