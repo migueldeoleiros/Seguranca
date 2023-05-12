@@ -82,8 +82,6 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					DataOutputStream dataOutputStream =
-                        new DataOutputStream(socket.getOutputStream());
 					DataInputStream dataInputStream =
                         new DataInputStream(socket.getInputStream());
 
@@ -92,10 +90,10 @@ public class myCloudServer {
 					
 					switch (command) {
 						case 0: //receive files 
-							receiveFile(recipient, socket, dataInputStream, dataOutputStream);
+							receiveFile(recipient, socket);
 							break;
 						case 1: //send files 
-							sendFile(recipient, socket, dataInputStream, dataOutputStream);
+							sendFile(recipient, socket);
 							break;
 					}
 
@@ -149,8 +147,12 @@ public class myCloudServer {
 			}
 		}
 
-		private void sendFile(String recipient, Socket socket, DataInputStream dataInputStream,
-                              DataOutputStream dataOutputStream) throws Exception {
+		private void sendFile(String recipient, Socket socket) throws Exception {
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
@@ -186,7 +188,7 @@ public class myCloudServer {
 							dataOutputStream.writeBoolean(false);
 						} else {
 							dataOutputStream.writeBoolean(true);
-							sendCertFile(certFile, dataInputStream, dataOutputStream);
+							sendCertFile(certFile, dataOutputStream);
 						}
 					}
 					
@@ -211,7 +213,8 @@ public class myCloudServer {
 			}
 		}
 
-		private void sendCertFile (File certFile, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+		private void sendCertFile (File certFile,
+                                   DataOutputStream dataOutputStream) throws Exception{
 			int bytes = 0;
 			FileInputStream fileInputStream = new FileInputStream(certFile); 
 						
@@ -227,8 +230,12 @@ public class myCloudServer {
 			System.out.println("Sent file : " + certFile.getName());
 		}
 
-		private void receiveFile(String recipient, Socket socket, DataInputStream dataInputStream,
-                                 DataOutputStream dataOutputStream) throws Exception{
+		private void receiveFile(String recipient, Socket socket) throws Exception{
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
 			int n_files = dataInputStream.readInt();
 
 			if (dataInputStream.readBoolean()){
@@ -237,7 +244,7 @@ public class myCloudServer {
 					dataOutputStream.writeBoolean(false);
 				} else {
 					dataOutputStream.writeBoolean(true);
-					sendCertFile(certFile, dataInputStream, dataOutputStream);
+					sendCertFile(certFile, dataOutputStream);
 				}
 			}
 
