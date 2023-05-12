@@ -329,6 +329,7 @@ public class Command {
                                        " can't be found locally or in the server");
                     System.exit(-1);
                 } else {
+                    certFile = new File("certificates/" + dataInputStream.readUTF());
                     receiveFile("certificates/" + certFile.getName());
                 }
             } else {
