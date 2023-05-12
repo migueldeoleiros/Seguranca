@@ -9,7 +9,6 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -209,7 +208,7 @@ public class myCloudServer {
 			int n_files = dataInputStream.readInt();
 
 			if (dataInputStream.readBoolean()){
-				File certFile = new File("serverFiles/certificados/" + recipient + ".keystore");
+				File certFile = new File("serverFiles/certificates/" + recipient + ".keystore");
 				if (!certFile.exists()){
 					dataOutputStream.writeBoolean(false);
 				} else {
