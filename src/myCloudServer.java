@@ -8,15 +8,22 @@
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 import javax.net.ServerSocketFactory;
@@ -24,6 +31,7 @@ import javax.net.ssl.SSLServerSocketFactory;
 
 
 public class myCloudServer {
+    private String serverDir = "serverFiles";
 
 	public static void main(String[] args) {
 		System.out.println("servidor: main");
@@ -82,20 +90,20 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
-					DataOutputStream dataOutputStream =
-                        new DataOutputStream(socket.getOutputStream());
 					DataInputStream dataInputStream =
                         new DataInputStream(socket.getInputStream());
 
 					int command = dataInputStream.readInt();
-					String recipient = dataInputStream.readUTF();
 					
 					switch (command) {
 						case 0: //receive files 
-							receiveFile(recipient, socket, dataInputStream, dataOutputStream);
+							handleFileReceiving(socket);
 							break;
 						case 1: //send files 
-							sendFile(recipient, socket, dataInputStream, dataOutputStream);
+							handleFileSending(socket);
+							break;
+						case 2: //create new user
+							handleUserCreating(socket);
 							break;
 					}
 
@@ -110,8 +118,98 @@ public class myCloudServer {
 			}
 		}
 
+		private void handleUserCreating(Socket socket) throws Exception {
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
+            String username = dataInputStream.readUTF();
+            System.out.println("Creating new user: " + username);
+            String password = dataInputStream.readUTF();
+
+            if(verifyUserCredentials(username, password)){
+                System.out.println("User " + username + " already exists.");
+                dataOutputStream.writeBoolean(false);
+            }
+            
+            byte[] salt = createSalt();
+            String passwordHash = hashPassword(password, salt);
+            
+            File usersFile = new File(serverDir + "/users");
+            if (!usersFile.exists()) {
+                usersFile.createNewFile();
+            }
+            // Append to the users file
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(usersFile, true))) {
+                writer.write(username + ";" + passwordHash + ";" +
+                             Base64.getEncoder().encodeToString(salt));
+                writer.newLine();
+            }
+            System.out.println("User " + username + " created.");
+            dataOutputStream.writeBoolean(true);
+        }
+
+		private void handleUserVerifying(Socket socket) throws Exception {
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
+            String username = dataInputStream.readUTF();
+            String password = dataInputStream.readUTF();
+
+            dataOutputStream.writeBoolean(verifyUserCredentials(username, password));
+        }
+
+        private boolean verifyUserCredentials(String username, String password) throws Exception {
+            File usersFile = new File(serverDir + "/users");
+            if (!usersFile.exists()) {
+                return false;
+            }
+            try (BufferedReader reader = new BufferedReader(new FileReader(usersFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(";");
+                    if (parts[0].equals(username)) {
+                        byte[] salt = Base64.getDecoder().decode(parts[2]);
+                        String storedHash = parts[1];
+                        String computedHash = hashPassword(password, salt);
+                        return storedHash.equals(computedHash);
+                    }
+                }
+            }
+            return false;
+        }
+
+        private byte[] createSalt() throws Exception {
+            SecureRandom random = new SecureRandom();
+            byte[] salt = new byte[16];
+            random.nextBytes(salt);
+            return salt;
+        }
+        
+        private String hashPassword(String password, byte[] salt) throws Exception{
+            String passwordHash = null;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(salt);
+            byte[] bytes = md.digest(password.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < bytes.length; i++) {
+                sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
+            }
+            passwordHash = sb.toString();
+            return passwordHash;
+        }
+        
+        public boolean verifyPassword(String hash, byte[] salt,  
+                                             String password) throws Exception {
+            String computedHash = hashPassword(password, salt);
+            return hash.equals(computedHash);
+        }
+        
 		private boolean checkServerFiles(String filePath, String recipient) {
-			File[] listFiles = new File("serverFiles", recipient).listFiles();
+			File[] listFiles = new File(serverDir, recipient).listFiles();
 
 			filePath = filePath.replaceAll("\\.(seguro|cifrado|assinatura|assinado|chave_secreta" + recipient +")$", "");
 			for(int i = 0; i < listFiles.length; i++) {
@@ -123,7 +221,7 @@ public class myCloudServer {
 		}
 
 		private List<File> getFiles(String filePath, String recipient) {
-			File[] listFiles = new File("serverFiles", recipient).listFiles();
+			File[] listFiles = new File(serverDir, recipient).listFiles();
 			List<File> files = new ArrayList<File>();
 
 			for(int i = 0; i < listFiles.length; i++) {
@@ -138,7 +236,8 @@ public class myCloudServer {
 		}
 
 		private String checkFileRecipient(String filePath){
-			String[] extensions = {"cifrado", "chave_secreta", "assinado", "assinatura", "seguro"};
+			String[] extensions = {"cifrado", "chave_secreta",
+                                   "assinado", "assinatura", "seguro"};
         	int lastDotIndex = filePath.lastIndexOf(".");
     		filePath = filePath.substring(lastDotIndex + 1, filePath.length());
 
@@ -149,19 +248,24 @@ public class myCloudServer {
 			}
 		}
 
-		private void sendFile(String recipient, Socket socket, DataInputStream dataInputStream,
-                              DataOutputStream dataOutputStream) throws Exception {
+		private void handleFileSending(Socket socket) throws Exception {
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
+            handleUserVerifying(socket);
+
+			String recipient = dataInputStream.readUTF();
 			int n_files = dataInputStream.readInt();
 
 			for (int i = 0; i < n_files; i++){
-
-				int bytes = 0;
 
 				String fileName = dataInputStream.readUTF();
 				System.out.println("Requested file: " + fileName);
 
 				
-				File directory = new File("serverFiles", recipient);
+				File directory = new File(serverDir, recipient);
 				if (!directory.exists()){
 					directory.mkdir();
 				}
@@ -181,41 +285,32 @@ public class myCloudServer {
 					dataOutputStream.writeUTF(extension);
 
 					if (dataInputStream.readBoolean()){
-						File certFile = new File("serverFiles/certificates/" + recipient + ".keystore");
+						File certFile = new File("serverFiles/certificates/" +
+                                                 extension + ".keystore");
 						if (!certFile.exists()){
 							dataOutputStream.writeBoolean(false);
 						} else {
 							dataOutputStream.writeBoolean(true);
-							sendCertFile(certFile, dataInputStream, dataOutputStream);
+							sendFile(certFile, dataOutputStream);
 						}
 					}
 					
 					dataOutputStream.writeInt(files.size());
 
 					for (File serverFile : files) {
-						FileInputStream fileInputStream =
-                            new FileInputStream(serverFile); 
-				
-						dataOutputStream.writeUTF(serverFile.getName());
-						dataOutputStream.writeLong(serverFile.length());
-						byte[] buffer = new byte[1024];
-						while ((bytes = fileInputStream.read(buffer)) != -1) {
-							dataOutputStream.write(buffer, 0, bytes);
-							dataOutputStream.flush();
-						}
-
-						fileInputStream.close();
-						System.out.println("Sent file : " + serverFile.getName());
+                        sendFile(serverFile, dataOutputStream);
 					}
 				}
 			}
 		}
 
-		private void sendCertFile (File certFile, DataInputStream dataInputStream, DataOutputStream dataOutputStream) throws Exception{
+		private void sendFile (File file,
+                                   DataOutputStream dataOutputStream) throws Exception{
 			int bytes = 0;
-			FileInputStream fileInputStream = new FileInputStream(certFile); 
+			FileInputStream fileInputStream = new FileInputStream(file); 
 						
-			dataOutputStream.writeLong(certFile.length());
+            dataOutputStream.writeUTF(file.getName());
+			dataOutputStream.writeLong(file.length());
 
 			byte[] buffer = new byte[1024];
 			while ((bytes = fileInputStream.read(buffer)) != -1) {
@@ -224,20 +319,28 @@ public class myCloudServer {
 			}
 
 			fileInputStream.close();
-			System.out.println("Sent file : " + certFile.getName());
+			System.out.println("Sent file : " + file.getName());
 		}
 
-		private void receiveFile(String recipient, Socket socket, DataInputStream dataInputStream,
-                                 DataOutputStream dataOutputStream) throws Exception{
+		private void handleFileReceiving(Socket socket) throws Exception{
+            DataOutputStream dataOutputStream =
+                new DataOutputStream(socket.getOutputStream());
+            DataInputStream dataInputStream =
+                new DataInputStream(socket.getInputStream());
+
+            handleUserVerifying(socket);
+
+			String recipient = dataInputStream.readUTF();
 			int n_files = dataInputStream.readInt();
 
 			if (dataInputStream.readBoolean()){
-				File certFile = new File("serverFiles/certificates/" + recipient + ".keystore");
+				File certFile = new File("serverFiles/certificates/" +
+                                         recipient + ".keystore");
 				if (!certFile.exists()){
 					dataOutputStream.writeBoolean(false);
 				} else {
 					dataOutputStream.writeBoolean(true);
-					sendCertFile(certFile, dataInputStream, dataOutputStream);
+					sendFile(certFile, dataOutputStream);
 				}
 			}
 
@@ -246,7 +349,7 @@ public class myCloudServer {
 
 				System.out.println("Receiving file: " + fileName);
 
-				File directory = new File("serverFiles", recipient);
+				File directory = new File(serverDir, recipient);
 				directory.mkdirs();
 
 				File file = new File(directory, fileName);
@@ -256,25 +359,30 @@ public class myCloudServer {
 					dataOutputStream.writeBoolean(true);
 				} else {
 					dataOutputStream.writeBoolean(false);
-					FileOutputStream fileOutputStream = new FileOutputStream(file);
-
-					long size = dataInputStream.readLong();
-
-					byte[] buffer = new byte[1024];
-                    while (size > 0) {
-                        int bufferSize = (int) Math.min(buffer.length, size);
-                        int bytesRead = dataInputStream.read(buffer, 0, bufferSize);
-                        if (bytesRead == -1) {
-                            break;
-                        }
-                        fileOutputStream.write(buffer, 0, bytesRead);
-                        size -= bytesRead;
-                    }
-
-					System.out.println("Received file: " + file);
-					fileOutputStream.close();
+                    receiveFile(file, dataInputStream);
 				}
 			}
 		}
+
+        private void receiveFile(File file,
+                                 DataInputStream dataInputStream) throws Exception{
+            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            
+            long size = dataInputStream.readLong();
+            
+            byte[] buffer = new byte[1024];
+            while (size > 0) {
+                int bufferSize = (int) Math.min(buffer.length, size);
+                int bytesRead = dataInputStream.read(buffer, 0, bufferSize);
+                if (bytesRead == -1) {
+                    break;
+                }
+                fileOutputStream.write(buffer, 0, bytesRead);
+                size -= bytesRead;
+            }
+            
+            System.out.println("Received file: " + file);
+            fileOutputStream.close();
+        }
 	}
 }

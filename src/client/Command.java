@@ -1,27 +1,20 @@
 package client;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.KeyStore;
-import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
 import javax.crypto.Cipher;
@@ -66,28 +59,20 @@ public class Command {
 
     private static boolean verifyUserCredentials(String username,
                                                  String password) throws Exception {
-        try (BufferedReader reader = new BufferedReader(new FileReader("users"))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(";");
-                if (parts[0].equals(username)) {
-                    byte[] salt = Base64.getDecoder().decode(parts[2]);
-                    String storedHash = parts[1];
-                    String computedHash = hashPassword(password, salt);
-                    return storedHash.equals(computedHash);
-                }
-            }
-        }
-        return false;
+        dataOutputStream.writeUTF(username);
+        dataOutputStream.writeUTF(password);
+        System.out.println("logging in as " + username);
+
+        return dataInputStream.readBoolean();
     }
 
     public void c(String recipient, List<String> filenames) throws Exception{
+
+        dataOutputStream.writeInt(0); //send command
         if(!verifyUserCredentials(username, password)){
             System.out.println("Username or password are incorrect");
             return;
         }
-
-        dataOutputStream.writeInt(0); //send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
@@ -125,17 +110,16 @@ public class Command {
     }
 
     public void s(String recipient, List<String> filenames) throws Exception{
-        if(!verifyUserCredentials(username, password)){
-            System.out.println("Username or password are incorrect");
-            return;
-        }
-
         // Chave privada do assinante -> keystore
         loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
 
         dataOutputStream.writeInt(0); // send command
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("Username or password are incorrect");
+            return;
+        }
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
 
@@ -160,12 +144,12 @@ public class Command {
     }
     
     public void e(String recipient, List<String> filenames) throws Exception{
+        e_option = true;
+        dataOutputStream.writeInt(0); // send command
         if(!verifyUserCredentials(username, password)){
             System.out.println("Username or password are incorrect");
             return;
         }
-        e_option = true;
-        dataOutputStream.writeInt(0); // send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*3);
 
@@ -210,10 +194,6 @@ public class Command {
     }
 
     public void g(String recipient, List<String> filenames) throws Exception{
-        if(!verifyUserCredentials(username, password)){
-            System.out.println("Username or password are incorrect");
-            return;
-        }
         //obter chave privada
         loadKeyStore();
         PrivateKey privateKey =
@@ -221,6 +201,10 @@ public class Command {
         
         
         dataOutputStream.writeInt(1); //send command
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("Username or password are incorrect");
+            return;
+        }
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(filenames.size());
         
@@ -266,49 +250,16 @@ public class Command {
 
     public void au(String username, String password,
                    String certificate) throws Exception {
-        if(verifyUserCredentials(username, password)){
-            System.out.println("User already exists");
-            return;
+        dataOutputStream.writeInt(2); //user creation command
+        dataOutputStream.writeUTF(username);
+        dataOutputStream.writeUTF(password);
+        // TODO send certificate
+
+        if(dataInputStream.readBoolean()){
+            System.out.println("User " + username + " created successfully.");
+        }else{
+            System.out.println("Error: User" + username + "already exists.");
         }
-
-        byte[] salt = createSalt();
-        String passwordHash = hashPassword(password, salt);
-        
-        // Append to the users file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("users", true))) {
-            writer.write(username + ";" + passwordHash + ";" +
-                         Base64.getEncoder().encodeToString(salt));
-            writer.newLine();
-        }
-
-
-        // TODO send certificate to server
-    }
-
-    private static byte[] createSalt() throws Exception {
-        SecureRandom random = new SecureRandom();
-        byte[] salt = new byte[16];
-        random.nextBytes(salt);
-        return salt;
-    }
-
-    private static String hashPassword(String password, byte[] salt) throws Exception{
-        String passwordHash = null;
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        md.update(salt);
-        byte[] bytes = md.digest(password.getBytes());
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < bytes.length; i++) {
-            sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
-        }
-        passwordHash = sb.toString();
-        return passwordHash;
-    }
-
-    public static boolean verifyPassword(String hash, byte[] salt,  
-                                         String password) throws Exception {
-        String computedHash = hashPassword(password, salt);
-        return hash.equals(computedHash);
     }
 
     private String getFileExtension(String recipient) {
@@ -329,6 +280,7 @@ public class Command {
                                        " can't be found locally or in the server");
                     System.exit(-1);
                 } else {
+                    certFile = new File("certificates/" + dataInputStream.readUTF());
                     receiveFile("certificates/" + certFile.getName());
                 }
             } else {
