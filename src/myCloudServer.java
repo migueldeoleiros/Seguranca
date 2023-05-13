@@ -35,7 +35,7 @@ public class myCloudServer {
 
 	public static void main(String[] args) {
 		System.out.println("servidor: main");
-		System.setProperty("javax.net.ssl.keyStore", "keystore.server");
+		System.setProperty("javax.net.ssl.keyStore", "serverFiles/keystore.server");
 		System.setProperty("javax.net.ssl.keyStorePassword", "123123");
 
 		myCloudServer server = new myCloudServer();

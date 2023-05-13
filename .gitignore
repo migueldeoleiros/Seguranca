@@ -9,7 +9,8 @@ users
 *.seguro
 *.keystore
 *.cer
-*serverFiles
+serverFiles/*
 *certificates
-!keystore.server
+!serverFiles/keystore.server
+!serverFiles/cert.server
 !README.txt
