@@ -286,7 +286,7 @@ public class myCloudServer {
 
 					if (dataInputStream.readBoolean()){
 						File certFile = new File("serverFiles/certificates/" +
-                                                 extension + ".keystore");
+                                                 extension + ".cer");
 						if (!certFile.exists()){
 							dataOutputStream.writeBoolean(false);
 						} else {
@@ -335,7 +335,7 @@ public class myCloudServer {
 
 			if (dataInputStream.readBoolean()){
 				File certFile = new File("serverFiles/certificates/" +
-                                         recipient + ".keystore");
+                                         recipient + ".cer");
 				if (!certFile.exists()){
 					dataOutputStream.writeBoolean(false);
 				} else {
