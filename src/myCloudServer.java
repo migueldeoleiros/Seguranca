@@ -105,9 +105,6 @@ public class myCloudServer {
 						case 2: //create new user
 							handleUserCreating(socket);
 							break;
-						case 3: //verify user credentials
-							handleUserVerifying(socket);
-							break;
 					}
 
 				} catch (Exception e) {
@@ -165,8 +162,7 @@ public class myCloudServer {
             dataOutputStream.writeBoolean(verifyUserCredentials(username, password));
         }
 
-        private boolean verifyUserCredentials(String username,
-                                                     String password) throws Exception {
+        private boolean verifyUserCredentials(String username, String password) throws Exception {
             File usersFile = new File(serverDir + "/users");
             if (!usersFile.exists()) {
                 return false;
@@ -258,6 +254,8 @@ public class myCloudServer {
             DataInputStream dataInputStream =
                 new DataInputStream(socket.getInputStream());
 
+            handleUserVerifying(socket);
+
 			String recipient = dataInputStream.readUTF();
 			int n_files = dataInputStream.readInt();
 
@@ -329,6 +327,8 @@ public class myCloudServer {
                 new DataOutputStream(socket.getOutputStream());
             DataInputStream dataInputStream =
                 new DataInputStream(socket.getInputStream());
+
+            handleUserVerifying(socket);
 
 			String recipient = dataInputStream.readUTF();
 			int n_files = dataInputStream.readInt();

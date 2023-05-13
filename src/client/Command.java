@@ -10,10 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.KeyStore;
-import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
@@ -61,7 +59,6 @@ public class Command {
 
     private static boolean verifyUserCredentials(String username,
                                                  String password) throws Exception {
-        dataOutputStream.writeInt(3); //user verification command
         dataOutputStream.writeUTF(username);
         dataOutputStream.writeUTF(password);
         System.out.println("logging in as " + username);
@@ -70,12 +67,12 @@ public class Command {
     }
 
     public void c(String recipient, List<String> filenames) throws Exception{
+
+        dataOutputStream.writeInt(0); //send command
         if(!verifyUserCredentials(username, password)){
             System.out.println("Username or password are incorrect");
             return;
         }
-
-        dataOutputStream.writeInt(0); //send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
@@ -113,17 +110,16 @@ public class Command {
     }
 
     public void s(String recipient, List<String> filenames) throws Exception{
-        if(!verifyUserCredentials(username, password)){
-            System.out.println("Username or password are incorrect");
-            return;
-        }
-
         // Chave privada do assinante -> keystore
         loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
 
         dataOutputStream.writeInt(0); // send command
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("Username or password are incorrect");
+            return;
+        }
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
 
@@ -148,12 +144,12 @@ public class Command {
     }
     
     public void e(String recipient, List<String> filenames) throws Exception{
+        e_option = true;
+        dataOutputStream.writeInt(0); // send command
         if(!verifyUserCredentials(username, password)){
             System.out.println("Username or password are incorrect");
             return;
         }
-        e_option = true;
-        dataOutputStream.writeInt(0); // send command
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*3);
 
@@ -198,10 +194,6 @@ public class Command {
     }
 
     public void g(String recipient, List<String> filenames) throws Exception{
-        if(!verifyUserCredentials(username, password)){
-            System.out.println("Username or password are incorrect");
-            return;
-        }
         //obter chave privada
         loadKeyStore();
         PrivateKey privateKey =
@@ -209,6 +201,10 @@ public class Command {
         
         
         dataOutputStream.writeInt(1); //send command
+        if(!verifyUserCredentials(username, password)){
+            System.out.println("Username or password are incorrect");
+            return;
+        }
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(filenames.size());
         
