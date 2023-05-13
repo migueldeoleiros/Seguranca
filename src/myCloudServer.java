@@ -35,7 +35,7 @@ public class myCloudServer {
 
 	public static void main(String[] args) {
 		System.out.println("servidor: main");
-		System.setProperty("javax.net.ssl.keyStore", "keystore.server");
+		System.setProperty("javax.net.ssl.keyStore", "serverFiles/keystore.server");
 		System.setProperty("javax.net.ssl.keyStorePassword", "123123");
 
 		myCloudServer server = new myCloudServer();
@@ -127,6 +127,11 @@ public class myCloudServer {
             String username = dataInputStream.readUTF();
             System.out.println("Creating new user: " + username);
             String password = dataInputStream.readUTF();
+
+            File directory = new File(serverDir, "certificates");
+            directory.mkdirs();
+            File certFile = new File(directory, username + ".cer");
+            receiveFile(certFile, dataInputStream);
 
             if(verifyUserCredentials(username, password)){
                 System.out.println("User " + username + " already exists.");
@@ -286,7 +291,7 @@ public class myCloudServer {
 
 					if (dataInputStream.readBoolean()){
 						File certFile = new File("serverFiles/certificates/" +
-                                                 extension + ".keystore");
+                                                 extension + ".cer");
 						if (!certFile.exists()){
 							dataOutputStream.writeBoolean(false);
 						} else {
@@ -335,7 +340,7 @@ public class myCloudServer {
 
 			if (dataInputStream.readBoolean()){
 				File certFile = new File("serverFiles/certificates/" +
-                                         recipient + ".keystore");
+                                         recipient + ".cer");
 				if (!certFile.exists()){
 					dataOutputStream.writeBoolean(false);
 				} else {

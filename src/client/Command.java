@@ -14,6 +14,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -76,11 +77,11 @@ public class Command {
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*2);
         
+        loadKeyStore();
+
         String extension = getFileExtension(recipient);
         handleCertificates(recipient);
 
-        //get privateKey
-        loadKeyStore();
         PublicKey publicKey = cert.getPublicKey();
 
         for (String filePath : filenames) {
@@ -153,13 +154,14 @@ public class Command {
         dataOutputStream.writeUTF(recipient);
         dataOutputStream.writeInt(numberValidFiles(filenames)*3);
 
-        String extension = getFileExtension(recipient);
-        handleCertificates(recipient);
 
         // Chave privada do assinante -> keystore
         loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
+
+        String extension = getFileExtension(recipient);
+        handleCertificates(recipient);
             
         PublicKey publicKey = cert.getPublicKey();
 
@@ -198,7 +200,6 @@ public class Command {
         loadKeyStore();
         PrivateKey privateKey =
             (PrivateKey) kstore.getKey(alias, password.toCharArray());
-        
         
         dataOutputStream.writeInt(1); //send command
         if(!verifyUserCredentials(username, password)){
@@ -253,7 +254,9 @@ public class Command {
         dataOutputStream.writeInt(2); //user creation command
         dataOutputStream.writeUTF(username);
         dataOutputStream.writeUTF(password);
-        // TODO send certificate
+
+        File certFile = new File(certificate);
+        sendFile(certFile);
 
         if(dataInputStream.readBoolean()){
             System.out.println("User " + username + " created successfully.");
@@ -271,7 +274,7 @@ public class Command {
 
     private void handleCertificates(String recipient) throws Exception{
         if (!username.equals(recipient)){
-            File certFile = new File("certificates/" + recipient + ".keystore");
+            File certFile = new File("certificates/" + recipient + ".cer");
             
             if (!certFile.exists()){
                 dataOutputStream.writeBoolean(true);
@@ -286,23 +289,19 @@ public class Command {
             } else {
                 dataOutputStream.writeBoolean(false);
             }
+            FileInputStream certFileStream = new FileInputStream(certFile);
             
-            FileInputStream kfile = new FileInputStream(certFile);
-            
-            try{
-                kstore = KeyStore.getInstance("PKCS12");
-                kstore.load(kfile, password.toCharArray()); // senha
+            try {
+                CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                cert = cf.generateCertificate(certFileStream);
             } catch (Exception e) {
-                System.out.println("Keystore's password is incorrect.");
+                System.out.println("Failed to load certificate.");
                 System.exit(-1);
             }
-            
-            alias = kstore.aliases().nextElement();
-            cert = kstore.getCertificate(alias);
+
         } else {
             dataOutputStream.writeBoolean(false);
         }
-        
     }
 
     private static void decryptReceivedFile(List<String> serverFiles,
@@ -544,7 +543,6 @@ public class Command {
         System.out.println("Sent file: " + file);
         
         fileInputStream.close();
-
     }
 
     private static boolean verifySignature(String filePath, String signaturePath,
