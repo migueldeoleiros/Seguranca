@@ -254,7 +254,9 @@ public class Command {
         dataOutputStream.writeInt(2); //user creation command
         dataOutputStream.writeUTF(username);
         dataOutputStream.writeUTF(password);
-        // TODO send certificate
+
+        File certFile = new File(certificate);
+        sendFile(certFile);
 
         if(dataInputStream.readBoolean()){
             System.out.println("User " + username + " created successfully.");
@@ -541,7 +543,6 @@ public class Command {
         System.out.println("Sent file: " + file);
         
         fileInputStream.close();
-
     }
 
     private static boolean verifySignature(String filePath, String signaturePath,

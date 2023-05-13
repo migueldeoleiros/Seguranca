@@ -128,6 +128,11 @@ public class myCloudServer {
             System.out.println("Creating new user: " + username);
             String password = dataInputStream.readUTF();
 
+            File directory = new File(serverDir, "certificates");
+            directory.mkdirs();
+            File certFile = new File(directory, username + ".cer");
+            receiveFile(certFile, dataInputStream);
+
             if(verifyUserCredentials(username, password)){
                 System.out.println("User " + username + " already exists.");
                 dataOutputStream.writeBoolean(false);
