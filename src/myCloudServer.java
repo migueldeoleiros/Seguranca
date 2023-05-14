@@ -1,4 +1,4 @@
-/* Segurança Informática - trabalho 1
+/* Segurança Informática - trabalho 2
    Grupo: 6
    Nuno Infante 55411
    Miguel López 59436
