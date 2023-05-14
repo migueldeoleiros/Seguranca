@@ -19,21 +19,30 @@ import java.io.DataOutputStream;
 
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Scanner;
 
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocketFactory;
 
+import java.nio.charset.StandardCharsets;
 
 public class myCloudServer {
     private String serverDir = "serverFiles";
+    private String macPassword = "";
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws Exception{
 		System.out.println("servidor: main");
 		System.setProperty("javax.net.ssl.keyStore", "serverFiles/keystore.server");
 		System.setProperty("javax.net.ssl.keyStorePassword", "123123");
@@ -46,7 +55,9 @@ public class myCloudServer {
 		server.startServer(Integer.parseInt(args[0]));
 	}
 
-	public void startServer (int port){
+	public void startServer (int port) throws Exception{
+        checkUsersFileIntegrity();
+
 		ServerSocket sSoc = null;
         
 		try {
@@ -76,6 +87,71 @@ public class myCloudServer {
 		}
 	}
 
+    private String calculateFileMac(File file, SecretKeySpec key) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(key);
+        byte[] fileBytes = Files.readAllBytes(file.toPath());
+        byte[] macBytes = mac.doFinal(fileBytes);
+        return Base64.getEncoder().encodeToString(macBytes);
+    }
+
+    private SecretKeySpec generateMacKey(String password) throws Exception {
+        byte[] salt = { (byte) 0xc9, (byte) 0x36, (byte) 0x78, (byte) 0x99, (byte) 0x52,
+                        (byte) 0x3e, (byte) 0xea, (byte) 0xf2 };
+        PBEKeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, 20, 256);
+        SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        SecretKey secretKey = kf.generateSecret(keySpec);
+        return new SecretKeySpec(secretKey.getEncoded(), "AES");
+    }
+
+    private void checkUsersFileIntegrity() throws Exception {
+        System.out.println("Checking users file integrity...");
+        
+        File usersFile = new File(serverDir + "/users");
+        File usersMacFile = new File(serverDir + "/users.mac");
+        
+        if (!usersFile.exists()) {
+            System.out.println("Users file does not exist. Skipping MAC verification.");
+            return;
+        }
+        
+        if(macPassword == ""){
+            macPassword = promptForMacPassword();
+        }
+        SecretKeySpec macKey = generateMacKey(macPassword);
+        
+        if (!usersMacFile.exists()) {
+            System.out.println("MAC file does not exist.");
+            if (promptToCreateMac()) {
+                String mac = calculateFileMac(usersFile, macKey);
+                Files.write(usersMacFile.toPath(), mac.getBytes(StandardCharsets.UTF_8));
+                System.out.println("MAC file created.");
+            } else {
+                System.out.println("Skipping MAC creation.");
+            }
+        } else {
+            String storedMac = new String(Files.readAllBytes(usersMacFile.toPath()),
+                                          StandardCharsets.UTF_8);
+            String computedMac = calculateFileMac(usersFile, macKey);
+            
+            if (storedMac.equals(computedMac)) {
+                System.out.println("Users file integrity verified.");
+            } else {
+                System.out.println("Users file integrity check failed.");
+                System.exit(1);
+            }
+        }
+    }
+
+    private String promptForMacPassword() {
+        System.out.print("Enter MAC password: ");
+        return new Scanner(System.in).nextLine();
+    }
+    
+    private boolean promptToCreateMac() {
+        System.out.print("Do you want to create a MAC for the password file? (y/n): ");
+        return new Scanner(System.in).nextLine().equalsIgnoreCase("y");
+    }
 
 	//Threads utilizadas para comunicacao com os clientes
 	class ServerThread extends Thread {
@@ -90,6 +166,7 @@ public class myCloudServer {
 		public void run(){
 			try {
 				try {
+                    checkUsersFileIntegrity();
 					DataInputStream dataInputStream =
                         new DataInputStream(socket.getInputStream());
 
