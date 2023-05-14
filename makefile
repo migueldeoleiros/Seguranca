@@ -1,3 +1,10 @@
+# Segurança Informática - trabalho 2
+#   Grupo: 6
+#   Nuno Infante 55411
+#   Miguel López 59436
+#   Marco Martins 41938
+#   João Nobre 51659
+
 JC = javac
 JFLAGS = -d bin -cp bin
 

@@ -17,8 +17,10 @@ executar ambos em conjunto será o mesmo que executar "make".
 
 Para gerar os certificados necessários para a ligação TLS, temos o comando "make server-certificates". 
 
-Para gerar keystores e certificados de teste para os utilizadores, fornecemos o comando "make client-keystores",
+Para gerar keystores e certificados de teste para os utilizadores, temos o comando "make client-keystores",
 criando ficheiros para dois utilizadores: maria, com a palavra-passe 123123 e jose, com a palavra-passe 321321
+
+Para fazer o setup completo podemos usar o comando "make all"
 
 
 # Para executar o programa
