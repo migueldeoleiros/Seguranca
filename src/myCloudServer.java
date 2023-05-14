@@ -1,4 +1,4 @@
-/* Segurança Informática - trabalho 1
+/* Segurança Informática - trabalho 2
    Grupo: 6
    Nuno Infante 55411
    Miguel López 59436
@@ -230,6 +230,29 @@ public class myCloudServer {
             }
             System.out.println("User " + username + " created.");
             dataOutputStream.writeBoolean(true);
+
+            // Update/create MAC
+            File usersMacFile = new File(serverDir + "/users.mac");
+            if (!usersMacFile.exists()) {
+                System.out.println("MAC file does not exist.");
+                if (promptToCreateMac()) {
+                    if(macPassword == ""){
+                        macPassword = promptForMacPassword();
+                    }
+                    SecretKeySpec macKey = generateMacKey(macPassword);
+                    String mac = calculateFileMac(usersFile, macKey);
+                    Files.write(usersMacFile.toPath(), mac.getBytes(StandardCharsets.UTF_8));
+                    System.out.println("MAC file created.");
+                } else {
+                    System.out.println("Skipping MAC creation.");
+                }
+            }
+            if(macPassword == ""){
+                macPassword = promptForMacPassword();
+            }
+            SecretKeySpec macKey = generateMacKey(macPassword);
+            String newMac = calculateFileMac(usersFile, macKey);
+            Files.write(usersMacFile.toPath(), newMac.getBytes(StandardCharsets.UTF_8));
         }
 
 		private void handleUserVerifying(Socket socket) throws Exception {
