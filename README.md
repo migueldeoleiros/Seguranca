@@ -1,21 +1,21 @@
 # Segurança Informática
 
-O projeto é composto por tres ficheiros, o cliente composto por "myCloud.java" e
-"client/Command.java" e o servidor "myCloudServer.java".
+O projeto é composto por tres ficheiros, o cliente composto por `myCloud.java` e
+`client/Command.java` e o servidor `myCloudServer.java`.
 
 # Para compilar os ficheiros
 
 O makefile tem várias opções para configurar o programa:
 
-"make server" e "make client" compilarão o código do servidor e do cliente, respectivamente,
-executar ambos em conjunto será o mesmo que executar "make".
+`make server` e `make client` compilarão o código do servidor e do cliente, respectivamente,
+executar ambos em conjunto será o mesmo que executar `make`.
 
-Para gerar os certificados necessários para a ligação TLS, temos o comando "make server-certificates". 
+Para gerar os certificados necessários para a ligação TLS, temos o comando `make server-certificates`. 
 
-Para gerar keystores e certificados de teste para os utilizadores, temos o comando "make client-keystores",
+Para gerar keystores e certificados de teste para os utilizadores, temos o comando `make client-keystores`,
 criando ficheiros para dois utilizadores: maria, com a palavra-passe 123123 e jose, com a palavra-passe 321321
 
-Para fazer o setup completo podemos usar o comando "make all"
+Para fazer o setup completo podemos usar o comando `make all`
 
 
 # Para executar o programa
